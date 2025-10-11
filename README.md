@@ -1,188 +1,159 @@
 # VectorBench
 
-**Local vector database experimentation and benchmarking** — Build semantic search apps with **VectorLiteDB**, a single-file embedded vector DB.
+Local vector database experimentation and benchmarking platform built on VectorLiteDB. Single-file embedded vector DB with semantic search, performance testing, and a web interface.
 
-## Why VectorBench?
-- **Experiment locally**: Reproducible, offline, and minimal — perfect for learning vector databases
-- **Comprehensive tooling**: Document ingestion, embeddings, metadata filters, search API, persistence, and benchmarking
-- **Built-in observability**: Real-time metrics, latency tracking, and parity checks
+## What's This For?
+
+Playing around with vector databases locally. Ingests documents, generates embeddings, runs searches, and benchmarks performance. Good for learning how vector DBs work or prototyping RAG applications without external dependencies.
 
 ## Stack
+
 - Python 3.10+
-- vectorlitedb (v0.1.0+)
-- sentence-transformers (`all-MiniLM-L6-v2`, 384-dim)
+- VectorLiteDB (single-file SQLite-based vector DB)
+- sentence-transformers (all-MiniLM-L6-v2, 384-dim embeddings)
 - FastAPI + Uvicorn
-- (Optional) PyTest for sanity checks
-- Optional Docker & docker-compose for one-command run
+- Optional: Docker/docker-compose
 
-## 🎓 **New to VectorLiteDB? Start Here!**
-
-- **[QUICK_START.md](QUICK_START.md)** - 5-minute test drive with real questions
-- **[UNDERSTANDING_VECTORLITEDB.md](UNDERSTANDING_VECTORLITEDB.md)** - Deep dive into concepts
-- **[Interactive Learning](learn_vectorlitedb.py)** - Hands-on experiments
+## Quick Start
 
 ```bash
-# Try the interactive learning lab
-python learn_vectorlitedb.py
-```
-
-## Setup
-```bash
-python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# Setup
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
 
-## Maintenance
-
-### Cleanup Temporary Files
-Remove cache files, macOS metadata, and other temporary files:
-```bash
-./cleanup.sh
-```
-
-This script removes:
-- `.DS_Store` files (macOS metadata)
-- `__pycache__` directories (Python cache)
-- `.pyc` files (compiled Python)
-- `.pytest_cache` (test cache)
-- `*.log` files
-- Editor temporary files (`*~`, `*.swp`)
-
-Run this periodically to keep your project clean!
-
-## Ingest docs and run
-```bash
+# Ingest some documents and run the API
 python ingest.py
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-# Now hit: http://127.0.0.1:8000/search?q=hello&k=5
-```
 
-### CLI search
-```bash
+# Hit the search endpoint
+curl "http://127.0.0.1:8000/search?q=your+query&k=5"
+
+# Or use the CLI
 python cli_search.py "example query"
 ```
 
-### Benchmarks
+Open `frontend/index.html` in a browser for the web interface.
+
+## Learning Resources
+
+If you're new to VectorLiteDB:
+- [QUICK_START.md](QUICK_START.md) - 5-minute walkthrough
+- [CONCEPTS.md](CONCEPTS.md) - How vector search actually works
+- `python learn_vectorlitedb.py` - Interactive experiments
+
+## Web Interface
+
+Two-column layout with search on the right, controls on the left.
+
+Features:
+- Document upload (PDF, DOCX, PPTX, XLSX, TXT, MD)
+- File-filtered search with dropdown
+- Real-time metrics: indexed files, query count, P95 latency
+- Benchmark suite with configurable test sizes
+- Scale testing across different vector counts
+- Accuracy verification against NumPy baseline
+- Search history and keyboard shortcuts (⌘T: run all tests, ⌘E: export)
+
+Local dev: just open `frontend/index.html`  
+Docker: served via nginx at `http://localhost:5173`
+
+## Docker
+
+Without compose:
+```bash
+docker build -t vectorbench .
+docker run --rm -p 8000:8000 \
+  -v "$PWD/docs:/app/docs" \
+  -v "$PWD/kb.db:/app/kb.db" vectorbench
+```
+
+With compose:
+```bash
+docker compose up --build
+# API: http://127.0.0.1:8000
+# Frontend: http://127.0.0.1:5173
+```
+
+## API Endpoints
+
+```
+GET  /health                      # Status and vector count
+GET  /search?q=...&k=5&file=...   # Semantic search (optional file filter)
+POST /upload                      # Upload document (multipart form)
+GET  /files                       # List files with chunk counts
+GET  /metrics                     # P50/P95 latency, query count
+GET  /bench?N=500                 # Benchmark (100-2000 vectors)
+GET  /parity?K=5                  # Accuracy check vs NumPy
+GET  /scale                       # Multi-scale performance test
+```
+
+## Benchmarking
+
+Via web interface:
+- Quick benchmark: customizable vector counts (100-2000)
+- Scale test: multiple sizes with timing
+- Accuracy verification: compare against NumPy ground truth
+
+Via CLI:
 ```bash
 python bench.py
 ```
 
-## Frontend
-The frontend provides a modern, responsive interface for semantic search with the following features:
+## Configuration
 
-- **Smart API Detection**: Automatically detects the correct API endpoint for local development vs Docker deployment
-- **Search History**: Remembers your last 10 searches for quick re-execution
-- **File Upload**: Upload documents in multiple formats (.txt, .md, .pdf, .docx, .pptx, .xlsx) directly through the web interface
-- **Enhanced UX**: Loading states, error handling, and visual feedback
-- **Keyboard Support**: Press Enter to search
+- Add documents to `docs/` and run `python ingest.py` (or upload via web)
+- Change distance metric in `VectorLiteDB()`: `cosine` (default), `l2`, `dot`
+- Filter searches by filename: `/search?file=sample.txt&q=...`
+- Supported formats: `.txt`, `.md`, `.pdf`, `.docx`, `.pptx`, `.xlsx`
 
-### Local Development
-Open `frontend/index.html` in your browser (or serve it). It calls the API at `http://127.0.0.1:8000` by default when opened from file://
+## Known Limitations
 
-### Docker Deployment
-The frontend is served via nginx with proper API proxying at `http://localhost:5173`
-
-## Docker (without compose)
-```bash
-docker build -t vectorbench .
-docker run --rm -p 8000:8000 -v "$PWD/docs:/app/docs" -v "$PWD/kb.db:/app/kb.db" vectorbench
-```
-
-## Docker Compose
-```bash
-docker compose up --build
-# API: http://127.0.0.1:8000/health
-# Frontend: http://127.0.0.1:5173
-```
-
-The Docker Compose setup includes:
-- **API Service**: FastAPI backend with automatic document ingestion
-- **Frontend Service**: Nginx serving the frontend with API proxy configuration
-- **Automatic Networking**: Frontend automatically communicates with backend
-- **Volume Mounts**: Persistent storage for documents and vector database
-
-## API Endpoints
-
-- `GET /health` - Check API status and vector count
-- `GET /search?q=query&k=5&file=optional` - Semantic search
-- `POST /upload` - Upload and ingest new documents
-- `GET /files` - List all available files in the knowledge base
-
-## 🔍 **Built-in Observability**
-
-The web interface includes real-time monitoring:
-
-- **`GET /metrics`** - Live latency tracking (p50/p95)
-- **`GET /bench`** - On-demand performance testing
-- **`GET /parity`** - Accuracy verification vs NumPy
-
-**Web Interface Buttons:**
-- **Refresh Health** → API status and vector count
-- **Refresh Metrics** → Search latency statistics  
-- **Run Quick Bench** → Performance test with 5k vectors
-- **Run Parity Check** → Verify search accuracy
-
-## Customize
-- Drop documents (`.txt`, `.md`, `.pdf`, `.docx`, `.pptx`, `.xlsx`) inside `docs/` and re-run `ingest.py` OR use the web upload feature
-- Change distance metric: `cosine` (default), `l2`, or `dot` in `VectorLiteDB(...)`
-- Use `filter` in `/search` (e.g., filter by filename via `?file=sample_1.txt`)
-- Upload files directly through the web interface without manual ingestion
-
-## Supported File Types
-- **Text Files**: `.txt`, `.md` - Direct text processing
-- **PDF Files**: `.pdf` - Text extraction using PyPDF2
-- **Word Documents**: `.docx` - Text extraction from paragraphs
-- **PowerPoint**: `.pptx` - Text extraction from slides and shapes
-- **Excel**: `.xlsx` - Text extraction from all sheets and cells
-
-## Limitations (by design)
-- Brute force search, comfortable up to ~10k–100k vectors
+By design:
+- Brute force search only (good for ~10k-100k vectors)
 - No concurrent writes
-- Bring-your-own-embeddings
+- Bring-your-own embeddings
 
-## ⚠️ Performance Notes
+## Performance Notes
 
-### macOS iCloud Sync Issue
-If you're experiencing slow benchmark performance (>30 seconds for N=500):
+### macOS iCloud Sync Warning
 
-**Cause:** macOS iCloud Drive syncing `~/Documents` folder interferes with SQLite database writes, causing 50-100x slowdown.
+If benchmarks are taking >30s for N=500, you're probably hitting iCloud sync overhead. macOS syncs `~/Documents` by default, causing 50-100x slowdown on SQLite writes.
 
-**Solution:** This repo stores database files in `~/Local/vectorbench-db/` (outside iCloud sync):
-- `kb.db` is symlinked from project root
-- Temporary benchmark files use local storage
-- Code remains in Git-tracked location
-
-**Manual Setup (if needed):**
+Fix: symlink the database outside iCloud sync:
 ```bash
 mkdir -p ~/Local/vectorbench-db
 ln -s ~/Local/vectorbench-db/kb.db kb.db
 ```
 
-**To check if you're affected:**
+Check if you're affected: `ls -la ~/Documents | head -3` (look for `@` symbols in permissions)
+
+### SQLite Write Characteristics
+
+VectorLiteDB uses `PRAGMA synchronous=FULL` for data safety. This means:
+- Search: very fast (brute force up to 100k vectors)
+- Insert: slower (~1-5ms/vector on SSD, up to 300ms on cloud storage)
+- Data integrity: zero data loss, even on power failure
+
+Typical benchmarks:
+- N=100: 0.5-1s (local SSD) vs 30s (iCloud)
+- N=500: 2-5s (local SSD) vs 5min (iCloud)
+- N=1000: 4-8s (local SSD) vs 10min (iCloud)
+
+For production workloads needing faster writes, consider chromadb, lancedb, qdrant, or FAISS. VectorBench prioritizes safety and simplicity for learning/prototyping.
+
+## Maintenance
+
+Clean up cache and temp files:
 ```bash
-ls -la ~/Documents | head -3
-# Look for @ symbols after permissions (drwx------@) = iCloud synced
+./cleanup.sh
 ```
 
-### SQLite Write Performance
-VectorLiteDB uses SQLite with `PRAGMA synchronous=FULL` mode, which prioritizes **data safety over speed**:
+Removes `.DS_Store`, `__pycache__`, `.pyc`, `.pytest_cache`, logs, and editor temp files.
 
-**Performance characteristics:**
-- ✅ **Search**: Very fast (brute force up to 100k vectors)
-- ⚠️ **Insert**: Slower (~1-5ms per vector on SSD, up to 300ms on cloud storage)
-- ✅ **Data integrity**: Zero data loss, even on power failure
+## Testing
 
-**Benchmark expectations:**
-- N=100 vectors: 0.5-1 seconds (local SSD) vs 30 seconds (iCloud)
-- N=500 vectors: 2-5 seconds (local SSD) vs 5 minutes (iCloud)
-- N=1000 vectors: 4-8 seconds (local SSD) vs 10 minutes (iCloud)
+See [TESTING.md](TESTING.md) for the full test suite including accuracy parity checks, concurrency tests, and crash recovery validation.
 
-**Why this matters:** The batch optimization in this repo helps reduce transaction overhead, but cannot eliminate the disk sync latency imposed by SQLite's durability guarantees. This is by design and ensures your data is never corrupted.
-
-**For production use cases requiring faster writes**, consider:
-- **chromadb** - Better write performance, similar API
-- **lancedb** - Built on Apache Arrow, much faster
-- **qdrant** - Production-grade with Docker support
-- **FAISS** - Fastest, but no persistence by default
-
-VectorBench is optimized for **learning, prototyping, and local RAG applications** where the safety-speed trade-off is appropriate.
+```bash
+python run_comprehensive_tests.py
+```
