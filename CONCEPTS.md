@@ -1,385 +1,568 @@
-# Understanding VectorBench: A Hands-On Learning Guide
+# Understanding Vector Search
 
-## 🎯 **What This Guide Does**
-This guide helps you **understand VectorBench by doing**, not just reading. Each experiment answers a real question you'd have when building a search system.
+A hands-on guide to vector databases. Learn by experimentation, not memorization.
 
-## 🧠 **The Big Questions We'll Answer**
+---
 
-### **1. "Is VectorLiteDB giving me the RIGHT results?"**
-- **What it means**: When you search for "machine learning", do you get the most relevant documents?
-- **Why it matters**: Wrong results = useless search system
-- **How we test**: Compare VectorLiteDB to the "gold standard" (NumPy brute-force)
+## What You'll Learn
 
-### **2. "How fast is it REALLY?"**
-- **What it means**: Will users wait 1 second or 10 seconds for results?
-- **Why it matters**: Slow search = frustrated users
-- **How we test**: Measure actual search times with different amounts of data
+This guide answers four fundamental questions through **interactive experiments**:
 
-### **3. "What happens when things go wrong?"**
-- **What it means**: What if the app crashes while adding documents?
-- **Why it matters**: You don't want to lose all your data
-- **How we test**: Simulate crashes and see if data survives
+1. **Correctness:** Are my search results accurate?
+2. **Performance:** How fast is it really?
+3. **Durability:** What happens when things break?
+4. **Scalability:** Where are the limits?
 
-### **4. "Can I trust it with my real data?"**
-- **What it means**: Will it handle weird characters, big files, lots of documents?
-- **Why it matters**: Real data is messy, not perfect
-- **How we test**: Throw everything at it and see what breaks
+Each experiment takes 1-5 minutes and produces real, measurable results.
 
-## 🎨 **VectorBench Interface Overview**
+---
 
-### **Layout**
+## Interface Overview
+
 ```
-┌─────────────────────┬────────────────────────┐
-│ LEFT PANEL          │ RIGHT PANEL            │
-├─────────────────────┼────────────────────────┤
-│ 📤 Upload Documents │ 🔍 Search (sticky)     │
-│ 📊 Performance      │ 🕐 Recent Searches     │
-│ ⚡ Quick Actions     │ 📄 Search Results      │
-│ 📈 Latency Chart    │                        │
-│ 🧪 Advanced Tests   │                        │
-└─────────────────────┴────────────────────────┘
+┌─────────────────────────┬──────────────────────────┐
+│ Control Panel (Left)    │ Results Panel (Right)    │
+├─────────────────────────┼──────────────────────────┤
+│ 📤 Document Upload      │ 🔍 Search Interface      │
+│ 📊 Performance Metrics  │ 🕐 Recent Queries        │
+│ ⚡ Quick Actions         │ 📄 Search Results        │
+│ 📈 Latency Visualization│                          │
+│ 🧪 Advanced Diagnostics │                          │
+└─────────────────────────┴──────────────────────────┘
 ```
 
-### **Quick Actions (One-Click Testing)**
-Located in the left panel for instant access:
-- **⚡ Benchmark** - Quick performance test (500 vectors)
-- **✓ Accuracy** - Verify search correctness
-- **🔄 Health** - System status check
-- **📊 Scale** - Test performance scaling
+### Quick Actions
 
-### **Advanced Tests (Detailed Control)**
-Expand "🧪 Advanced Tests" for customizable options:
-- **Quick Benchmark** - Choose size: 100/500/1K/2K vectors
-- **Scale Test** - Profiles: Quick/Standard/Thorough
-- **Accuracy Verification** - Test with 5/10/20 results
-- **System Health** - Detailed diagnostic report
+One-click testing with sensible defaults:
 
-### **Header Actions**
-- **🧪 Run All Tests** - Executes complete diagnostic suite with live progress
-- **📊 Export** - Copy comprehensive report to clipboard (appears after tests complete)
-
-### **Performance Metrics (Auto-Refreshing)**
-Live metrics in the left panel (updates every 5 seconds):
 ```
-📊 Performance
-┌──────────────────────────────────────┐
-│ Indexed │ Queries │ Latency │ Status │
-│    5    │   142   │  45ms   │  Good  │
-│  files  │  total  │  p95    │        │
-└──────────────────────────────────────┘
+⚡ Benchmark    → 500 vectors, ~10s
+✓ Accuracy     → NumPy parity check
+🔄 Health      → System diagnostics
+📊 Scale       → Quick scaling profile
 ```
 
-## 🚀 **Hands-On Experiments (Start Here!)**
+### Advanced Diagnostics
 
-### **Experiment 1: "Am I Getting Good Results?" (5 minutes)**
+Customizable test parameters for deep analysis:
 
-**The Question**: When I search for something, am I getting the most relevant results?
+- **Benchmark:** 100 / 500 / 1K / 2K vectors
+- **Scale Test:** Quick / Standard / Thorough profiles
+- **Accuracy:** Top-5 / Top-10 / Top-20 verification
+- **Health:** Comprehensive system report
 
-**What You'll Do**:
-1. Open http://localhost:8000 in your browser
-2. **Quick Method**: Click the **"✓ Accuracy"** button in **Quick Actions** (left panel)
-3. **Custom Method**: Expand **"🧪 Advanced Tests"** → Select test size → Click **"Run Accuracy Check"**
-4. Wait 1-3 seconds for results
+### Performance Metrics
 
-**What to Look For**:
+Live dashboard (5-second refresh):
+
+| Metric | Description |
+|:-------|:------------|
+| **Indexed** | Documents in database |
+| **Queries** | Total searches executed |
+| **P95 Latency** | 95th percentile response time |
+| **Status** | Color-coded health indicator |
+
+---
+
+## Experiment 1: Verify Correctness
+
+**Time:** 2-3 seconds
+
+**Question:** *Is VectorLiteDB returning the correct results?*
+
+### Procedure
+
+1. Navigate to http://localhost:8000
+2. Click **"✓ Accuracy"** in Quick Actions
+3. Observe results
+
+### Expected Output
+
 ```
 ✅ Accuracy Verified
 
-✅ Perfect Match!
+Perfect Match!
 VectorLiteDB results are identical to the gold-standard
-NumPy implementation. Your search results are 
-mathematically correct! 🎉
+NumPy brute-force implementation.
 
 Test Details:
-• Compared top 5 search results
-• Baseline: NumPy ✓
-• VectorLiteDB: ✓
-
-[📋 View Raw Data] (expandable)
+• Algorithm: Cosine similarity
+• Test vectors: 1,000 random samples
+• Top-K compared: 5 results
+• Baseline: NumPy (reference)
+• System: VectorLiteDB (test)
 ```
 
-**What This Means**:
-- ✅ "Perfect Match!" = VectorLiteDB is working correctly
-- ❌ "Mismatch Detected" = Something's wrong with the search algorithm
-- The test compares 1000 random vectors against NumPy's "perfect" algorithm
+### Interpretation
 
-**Real-World Impact**: If this fails, your search results are mathematically incorrect, and users will get irrelevant results.
+| Result | Meaning | Action |
+|:-------|:--------|:-------|
+| ✅ **Perfect Match** | Results are mathematically correct | No action needed |
+| ⚠️ **Near Match** | Tie-breaking differences only | Acceptable (floating-point precision) |
+| ❌ **Mismatch** | Algorithm error detected | Update VectorLiteDB or rebuild DB |
+
+> **Technical Note:** Minor differences in ordering can occur when multiple documents have nearly identical scores (e.g., 0.85234 vs 0.85233). This is normal floating-point behavior and doesn't affect search quality.
 
 ---
 
-### **Experiment 2: "How Fast Is My Search?" (3 minutes)**
+## Experiment 2: Measure Performance
 
-**The Question**: How long do users wait for search results?
+**Time:** Continuous (live monitoring)
 
-**What You'll Do**:
-1. Look at the **📊 Performance** section in the left panel
-2. Metrics automatically refresh every 5 seconds
-3. **Optional**: Click **"🔄 Health"** in Quick Actions for detailed system report
+**Question:** *How fast are my searches?*
 
-**What to Look For**:
-The **Status** card shows color-coded performance:
-- **Green (Excellent)**: < 50ms - Lightning fast ⚡
-- **Blue (Good)**: 50-100ms - Production ready ✅
-- **Yellow (OK)**: 100-300ms - Noticeable delay ⚠️
-- **Red (Slow)**: > 300ms - Needs optimization ❌
+### Procedure
 
-**Example Metrics**:
+Monitor the **Performance** panel in the left sidebar. Metrics auto-refresh every 5 seconds.
+
+### Status Indicators
+
 ```
-Indexed: 5 files
-Queries: 142 total
-Latency: 45ms (p95)
-Status: Good (blue background)
+🟢 Excellent   < 50ms    Production-grade, no optimization needed
+🔵 Good       50-100ms   Acceptable for most use cases
+🟡 OK        100-300ms   Noticeable delay, consider optimization
+🔴 Slow        > 300ms   User experience impacted, action required
 ```
 
-**What This Means**:
-- **Indexed**: Number of files in your database
-- **Queries**: Total searches performed
-- **Latency (P95)**: 95% of searches complete within this time
-- **Status**: Human-readable performance assessment
+### Metric Definitions
 
-**Real-World Impact**: Users expect search results in under 100ms. Slower than that feels sluggish. The color coding helps you instantly see if action is needed.
+**P95 Latency (95th Percentile)**
+
+95% of all search requests complete faster than this value. We track P95 instead of average because:
+
+- Captures worst-case user experience
+- Reveals performance outliers
+- Better indicator of system stability
+
+**Good performance:** P95 < 2× P50
+
+**Status Calculation**
+- Indexed file count
+- Query volume
+- Latency percentiles
+- Combined health score
+
+> **Pro Tip:** Users perceive latency differently based on context:
+> - **< 100ms:** Feels instant
+> - **100-300ms:** Noticeable but acceptable
+> - **> 300ms:** Frustratingly slow
 
 ---
 
-### **Experiment 3: "What's My System's Limit?" (5 minutes)**
+## Experiment 3: Find Performance Limits
 
-**The Question**: How many documents can I add before it gets too slow?
+**Time:** 2 seconds - 1 minute (depending on test size)
 
-**What You'll Do**:
-1. **Quick Method**: Click **"⚡ Benchmark"** in **Quick Actions** (tests 500 vectors)
-2. **Custom Method**: Expand **"🧪 Advanced Tests"** → Select vector count:
-   - 100 (Fast - ~2s)
-   - 500 (Recommended - ~10s)
-   - 1,000 (Thorough - ~30s)
-   - 2,000 (Advanced - ~1min)
+**Question:** *How many documents can I index before performance degrades?*
+
+### Procedure
+
+**Option A: Quick Test**
+1. Click **"⚡ Benchmark"** (tests 500 vectors)
+
+**Option B: Custom Test**
+1. Expand **"Advanced Tests"**
+2. Select vector count (100 / 500 / 1K / 2K)
 3. Click **"Run Benchmark"**
-4. Watch the progress indicator
 
-**What to Look For**:
+### Sample Results
+
 ```
-✓ Quick Benchmark Results
+✓ Benchmark Complete
 
-Database Size: 500 vectors
-Insert Speed: 0.8ms per vector
-Search Time: 45.2ms
-File Size: 12.3 MB
+Configuration:
+  Vectors: 500
+  Dimensions: 384
+  Metric: cosine
 
-Good Performance: Search completed in 45.2ms.
-Great for production use!
-```
+Performance:
+  Insert: 0.8ms/vector (total: 400ms)
+  Search: 45.2ms (1K queries)
+  Storage: 12.3 MB
 
-**What This Means**:
-- **Insert Speed**: How long to add each document (< 5ms is good)
-- **Search Time**: Query latency (< 100ms is excellent)
-- **File Size**: Storage requirements for capacity planning
-
-**Warning Signs**:
-If you see a yellow warning box:
-```
-⚠️ Slow inserts detected (15.2ms avg)
-
-This may indicate:
-• Project on iCloud or network drive
-• Slow disk I/O
-• Move database to local storage for better performance
+Assessment: Good Performance ✓
+Search latency within acceptable range for production use.
 ```
 
-**Real-World Impact**: 
-- Insert time > 10ms = Slow document ingestion (likely iCloud sync issue)
-- Search time > 200ms = Users will notice delays
-- File size growth = Plan for storage capacity
+### Key Metrics
+
+| Metric | Good | Acceptable | Poor |
+|:-------|-----:|----------:|-----:|
+| **Insert Speed** | < 2ms | 2-10ms | > 10ms |
+| **Search Latency** | < 50ms | 50-200ms | > 200ms |
+| **Storage Efficiency** | ~2KB/vec | ~5KB/vec | > 10KB/vec |
+
+### Warning Signs
+
+```
+⚠️ Slow Inserts Detected (15.2ms avg)
+
+Likely causes:
+• Project stored on iCloud Drive or network storage
+• Slow disk I/O performance
+• Background sync processes interfering
+
+Recommended fix:
+Move database to local, non-synced storage:
+  mkdir -p ~/Local/vectorbench-db
+  mv kb.db ~/Local/vectorbench-db/
+  ln -s ~/Local/vectorbench-db/kb.db kb.db
+```
+
+> **Root Cause:** VectorLiteDB uses SQLite with `PRAGMA synchronous=FULL`, which forces disk writes for durability. Cloud-synced folders add network latency to every write operation, causing 50-100× slowdowns.
 
 ---
 
-### **Experiment 4: "How Does Performance Scale?" (20 seconds - 3 minutes)**
+## Experiment 4: Test Scaling Behavior
 
-**The Question**: What happens when I add 10x more documents?
+**Time:** 20 seconds - 3 minutes
 
-**What You'll Do**:
-1. Expand **"🧪 Advanced Tests"**
-2. Find **"📊 Scale Test"** section
-3. Select a profile:
-   - **Quick**: 100, 250, 500 vectors (~20s)
-   - **Standard**: 500, 1K, 2K vectors (~1min)
-   - **Thorough**: 1K, 2.5K, 5K vectors (~3min)
-4. Click **"Run Scale Test"**
-5. Watch real-time progress: "⏱️ Testing 250 vectors (2/3)..."
+**Question:** *How does performance degrade as data grows?*
 
-**What to Look For**:
-A line graph showing search time vs database size:
+### Procedure
+
+1. Expand **"Advanced Tests"** → **"Scale Test"**
+2. Select profile:
+
+| Profile | Test Sizes | Duration | Use Case |
+|:--------|:-----------|:---------|:---------|
+| **Quick** | 100, 250, 500 | ~20s | Daily health checks |
+| **Standard** | 500, 1K, 2K | ~1min | Sprint validation |
+| **Thorough** | 1K, 2.5K, 5K | ~3min | Release qualification |
+
+3. Click **"Run Scale Test"**
+4. Observe real-time progress and chart
+
+### Output Visualization
+
 ```
-Search Time (ms)
-     ↑
- 100 |                    •
-  80 |              •
-  60 |        •
-  40 |  •
-   0 └────────────────────→
-     100  250  500  1K
-        Number of Vectors
+  Search Latency (ms)
+       ↑
+   120 │                        •
+   100 │                   •
+    80 │              •
+    60 │         •
+    40 │    •
+    20 │•
+     0 └─────────────────────────────→
+       100   250   500   1K   2K   5K
+                 Vectors
 ```
 
-**What This Means**:
-- **Linear growth**: Normal for brute-force algorithm
-- **Steep curve**: You're approaching scale limits
-- **Flat curve**: Excellent caching or small dataset
+### Interpreting Results
 
-**Real-World Impact**: This tells you when to migrate to a more sophisticated vector database (when line crosses your latency threshold).
+**Linear Growth (Expected)**
+```
+Latency increases proportionally with data size.
+This is normal for brute-force search algorithms.
+```
+
+**Steep Curve (Warning)**
+```
+Non-linear growth indicates you're approaching
+practical limits. Consider migration to ANN-based
+solutions (Chroma, Qdrant, FAISS).
+```
+
+**Flat Curve (Unusual)**
+```
+Performance isn't scaling with data. Possible causes:
+• Test size too small to show differences
+• Aggressive caching
+• Bottleneck elsewhere in system
+```
 
 ---
 
-### **Experiment 5: "What Happens When Things Break?" (10 minutes)**
+## Experiment 5: Test Data Durability
 
-**The Question**: Will I lose my data if something goes wrong?
+**Time:** 10-15 seconds
 
-**What You'll Do**:
-1. Run the crash test from terminal:
+**Question:** *Will my data survive a crash?*
+
+### Procedure
+
 ```bash
-python -c "from tests.test_persistence_crash import test_normal_persistence; test_normal_persistence()"
+python -c "
+from tests.test_persistence_crash import test_normal_persistence
+test_normal_persistence()
+"
 ```
-2. Look for "✅ PASS" or "❌ FAIL"
 
-**What This Means**:
-- ✅ **PASS**: Your data is safe, even if the app crashes
-- ❌ **FAIL**: You could lose data in a crash
+### Expected Output
 
-**Real-World Impact**: Data loss = angry users and lost work. This test ensures your database has proper durability guarantees.
+```
+✅ PASS: Data persisted correctly
+  - Database reopened successfully
+  - Vector count intact
+  - Metadata preserved
+  - No corruption detected
+```
 
----
+### Failure Modes
 
-## 🎓 **Understanding the Technical Terms**
+```
+❌ FAIL: Data integrity compromised
 
-### **"Parity Check" = "Are the results correct?"**
-- **Simple explanation**: We compare VectorLiteDB to a "perfect" algorithm (NumPy)
-- **How it works**: Both search 1000 random vectors, and we check if top results match
-- **Why it matters**: If results are wrong, your search is mathematically broken
-- **What to look for**: "Perfect Match!" message with ✅ checkmark
+This is a serious issue indicating:
+• VectorLiteDB version bug
+• Unreliable storage medium
+• Filesystem corruption
+• Insufficient write permissions
 
-### **"Latency" = "How long does it take?"**
-- **Simple explanation**: Time from clicking search to seeing results
-- **Measured in**: Milliseconds (ms) - 1000ms = 1 second
-- **Why it matters**: Users notice delays over 100ms
-- **What to look for**: The number in the "Latency" performance card
-
-### **"P50/P95" = "How consistent is the speed?"**
-- **Simple explanation**: 
-  - **P50 (Median)**: Half of searches are this fast or faster
-  - **P95 (95th Percentile)**: 95% of searches are this fast or faster
-- **Why we show P95**: Catches slow outliers that P50 might hide
-- **Why it matters**: Consistent speed = better user experience
-- **What to look for**: P95 should be < 2x P50 for stable performance
-
-### **"Brute Force" = "The simple, correct way"**
-- **Simple explanation**: Check EVERY document to find the best matches
-- **Trade-off**: Slow but always 100% correct (our "gold standard")
-- **Why we use it**: VectorLiteDB should match brute force results exactly
-- **Alternative**: ANN (Approximate Nearest Neighbor) - faster but slightly less accurate
-
-### **"Status" = "Is performance acceptable?"**
-- **What it shows**: Human-readable assessment of your P95 latency
-- **Color coding**:
-  - 🟢 Excellent (< 50ms): Lightning fast
-  - 🔵 Good (50-100ms): Production ready
-  - 🟡 OK (100-300ms): Acceptable for most cases
-  - 🔴 Slow (> 300ms): Needs optimization
-- **Why it matters**: Quick visual feedback without interpreting numbers
-
-## 🔍 **Common Questions & Answers**
-
-### **Q: Why does the parity check sometimes show different numbers?**
-**A**: This is normal! When documents have very similar scores (e.g., 0.8523 vs 0.8522), the order might vary slightly due to floating-point precision. As long as you see "Perfect Match!", the results are correct.
-
-### **Q: My search is slow - what should I do?**
-**A**: 
-1. Check the **Status** card - if it's yellow/red, investigate
-2. Look at **Indexed** count - more files = slower search
-3. Run the **Scale Test** to see performance curve
-4. If consistently > 300ms, consider migrating to Chroma, Qdrant, or FAISS
-
-### **Q: The file size is growing fast - is this normal?**
-**A**: Yes! Each document chunk (with 384-dim vector + metadata) takes space:
-- **Typical**: ~2-5 KB per chunk
-- **Expected growth**: ~10 MB per 1,000 vectors
-- **Check benchmark** results to see storage rate for your data
-
-### **Q: What if the crash test fails?**
-**A**: This is serious! It means potential data loss:
-1. Check your VectorLiteDB version
-2. Ensure database isn't on unreliable storage
-3. Implement regular backups
-4. Consider WAL mode for SQLite
-
-### **Q: Why do Quick Actions and Advanced Tests exist?**
-**A**: 
-- **Quick Actions**: One-click testing with sensible defaults (for quick checks)
-- **Advanced Tests**: Customizable options (for deep analysis and specific scenarios)
-
-### **Q: What does "Run All Tests" do?**
-**A**: 
-Executes a complete diagnostic suite:
-1. System Health Check
-2. Quick Benchmark (500 vectors)
-3. Accuracy Verification
-4. Scale Test (quick profile)
-
-Shows live progress in a floating modal. Results are exportable to clipboard.
-
-### **Q: My benchmark shows slow inserts (>10ms) - why?**
-**A**: Almost always caused by:
-1. **iCloud Drive sync** - Move project out of ~/Documents
-2. **Network storage** - Use local SSD
-3. **Slow disk** - Check disk performance
-
-**Solution**: Move database to ~/Local/vectorbench-db/ (outside sync)
-
-## 🎯 **What Each Test Tells You About Your System**
-
-| Test | What It Measures | Good Result | Bad Result | Action Needed |
-|------|------------------|-------------|------------|---------------|
-| **Accuracy** | Are results correct? | Perfect Match! | Mismatch Detected | Check VectorLiteDB version |
-| **Performance** | How fast is search? | Status: Good/Excellent | Status: Slow | Reduce doc count or optimize |
-| **Benchmark** | What's the limit? | Search < 100ms | Search > 300ms | Consider migration |
-| **Scale Test** | How does it scale? | Linear growth | Steep curve | Near scale limit |
-| **Crash Test** | Is data safe? | ✅ PASS | ❌ FAIL | Backup strategy needed |
-
-## ⌨️ **Keyboard Shortcuts**
-
-Speed up your workflow:
-- **⌘K** (Ctrl+K): Focus search box
-- **⌘↵** (Ctrl+Enter): Execute search
-- **⌘T** (Ctrl+T): Run all tests
-- **⌘E** (Ctrl+E): Export results (after tests run)
-- **Esc**: Clear search box
-
-## 🚀 **Next Steps: Experiment on Your Own**
-
-1. **Add more documents** via upload and watch metrics change in real-time
-2. **Try different search queries** and observe latency variations
-3. **Run benchmarks** with different vector counts to find your limit
-4. **Compare profiles** in Scale Test (Quick vs Standard vs Thorough)
-5. **Test edge cases** like very long documents or special characters
-6. **Export results** and track performance over time
-
-## 💡 **The Bottom Line**
-
-These tests aren't just technical exercises - they answer real questions:
-
-- **"Can I trust this system?"** → Accuracy checks verify mathematical correctness
-- **"Will my users be happy?"** → Latency metrics and Status show UX quality
-- **"How big can I grow?"** → Benchmark and Scale tests reveal limits
-- **"What if something breaks?"** → Crash tests ensure data durability
-- **"Is my setup optimal?"** → Insert speed warnings catch environment issues
-
-## 🎓 **Key Takeaways**
-
-1. **Green Status = Happy Users**: Aim for P95 < 100ms
-2. **Perfect Match = Trust the Math**: Accuracy checks validate correctness
-3. **Linear Scaling = Expected**: Brute force is O(N), plan accordingly
-4. **Slow Inserts = Environment Issue**: Almost always iCloud/network storage
-5. **Scale Test = Migration Signal**: Steep curve = time to consider alternatives
-
-Use these experiments to understand your system deeply, not just to pass tests. The metrics and visualizations are designed to help you make informed decisions about when and how to use VectorBench vs. more sophisticated vector databases.
+Action required:
+1. Implement regular backups
+2. Consider enabling SQLite WAL mode
+3. Verify storage medium reliability
+4. Check filesystem for errors
+```
 
 ---
 
-**Ready to start?** Open http://localhost:8000 and click **"✓ Accuracy"** to verify your setup! 🚀
+## Technical Concepts
+
+### Parity Checks
+
+**Definition:** Validation that VectorLiteDB produces identical results to a reference implementation.
+
+**Implementation:**
+1. Generate 1,000 random 384-dim vectors
+2. Index in both VectorLiteDB and NumPy
+3. Execute identical queries
+4. Compare top-K results (accounting for ties)
+
+**Why it matters:** Without parity checks, you can't trust your search results are correct.
+
+<br>
+
+### Latency Percentiles
+
+| Percentile | What It Measures |
+|:-----------|:-----------------|
+| **P50 (Median)** | Typical user experience |
+| **P95** | Worst experience for 95% of users |
+| **P99** | Outliers and edge cases |
+
+**Why P95?** It balances between capturing most user experiences while filtering extreme outliers that might be measurement errors.
+
+<br>
+
+### Brute Force vs ANN
+
+**Brute Force (VectorLiteDB)**
+```
+✓ 100% accurate results
+✓ Simple implementation
+✓ Predictable behavior
+✗ O(N) time complexity
+✗ Doesn't scale to millions
+```
+
+**ANN (Approximate Nearest Neighbor)**
+```
+✓ Sub-linear time complexity
+✓ Scales to billions of vectors
+✗ ~95-99% recall (trade accuracy for speed)
+✗ Complex implementation
+✗ Harder to tune
+```
+
+<br>
+
+### Performance Status
+
+Algorithm for status indicator:
+
+```python
+if p95_latency < 50:
+    return "🟢 Excellent"
+elif p95_latency < 100:
+    return "🔵 Good"
+elif p95_latency < 300:
+    return "🟡 OK"
+else:
+    return "🔴 Slow"
+```
+
+---
+
+## FAQ
+
+<details>
+<summary><b>Q: Why do parity checks sometimes show different result orderings?</b></summary>
+
+**A:** When multiple documents have nearly identical similarity scores (e.g., 0.8523 vs 0.8522), the ordering between them is arbitrary. This is due to floating-point precision limits and doesn't affect search quality. As long as the **set** of results matches, the check passes.
+
+Example:
+```
+NumPy:       [doc3, doc7, doc2, doc9, doc1]
+VectorLiteDB: [doc7, doc3, doc2, doc9, doc1]
+
+Result: ✅ PASS (docs 3 and 7 are tied)
+```
+</details>
+
+<details>
+<summary><b>Q: My search is consistently slow. What should I do?</b></summary>
+
+**A:** Follow this diagnostic tree:
+
+1. **Check Status indicator**
+   - Green/Blue: No action needed
+   - Yellow/Red: Continue troubleshooting
+
+2. **Run Scale Test**
+   - Linear growth: Normal brute-force behavior
+   - Steep curve: Approaching scale limits
+
+3. **Check indexed document count**
+   - < 10K: Should be fast, investigate environment
+   - 10K-50K: Expected to be slower
+   - \> 50K: Consider migration to ANN-based solution
+
+4. **Verify environment**
+   - Not on cloud-synced storage
+   - Fast SSD with good I/O
+   - Sufficient RAM (1GB+ for 10K vectors)
+</details>
+
+<details>
+<summary><b>Q: Database file size is growing rapidly. Is this a problem?</b></summary>
+
+**A:** This is **normal behavior**. Here's the math:
+
+```
+Per-vector storage:
+  384 dims × 4 bytes = 1,536 bytes (vector)
+  + ~500-2000 bytes (metadata)
+  + ~500 bytes (SQLite overhead)
+  = 2.5-4 KB per vector
+
+Expected growth:
+  1K vectors → ~10 MB
+  10K vectors → ~100 MB
+  50K vectors → ~500 MB
+```
+
+If growth is **significantly higher**, you may have:
+- Excessive metadata per document
+- Large text chunks not properly summarized
+- Duplicate entries
+
+Check with: `SELECT COUNT(*), AVG(LENGTH(metadata)) FROM vectors;`
+</details>
+
+<details>
+<summary><b>Q: What's the difference between Quick Actions and Advanced Tests?</b></summary>
+
+**A:**
+
+**Quick Actions** → One-click testing with production defaults
+- Benchmark: 500 vectors
+- Accuracy: Top-5 verification
+- Scale: Quick profile
+
+**Advanced Tests** → Full control for specialized testing
+- Benchmark: 100-2,000 vectors
+- Accuracy: Top-5 to Top-20
+- Scale: Quick/Standard/Thorough profiles
+
+Use **Quick Actions** for daily health checks. Use **Advanced Tests** when you need specific test parameters or deeper analysis.
+</details>
+
+<details>
+<summary><b>Q: Why are my inserts taking >10ms each?</b></summary>
+
+**A:** Almost always environmental issues:
+
+**Root causes (in order of likelihood):**
+
+1. **iCloud/OneDrive/Dropbox sync** (90% of cases)
+   - Solution: Move DB to `~/Local/vectorbench-db/`
+
+2. **Network-attached storage**
+   - Solution: Use local SSD
+
+3. **Slow disk I/O**
+   - Check: `sudo fs_usage -f filesys | grep kb.db`
+   - Solution: Upgrade storage or reduce sync load
+
+4. **Insufficient disk space**
+   - Check: `df -h`
+   - Solution: Free up space (< 10% free triggers slowdowns)
+
+**Not a VectorLiteDB bug.** The library uses standard SQLite with synchronous writes for durability.
+</details>
+
+---
+
+## Testing Decision Matrix
+
+Use this table to understand what each test tells you about your system:
+
+| Test | Question Answered | Good Result | Bad Result | Next Steps |
+|:-----|:------------------|:------------|:-----------|:-----------|
+| **Accuracy** | Are results correct? | Perfect Match | Mismatch Detected | Update library or rebuild DB |
+| **Performance** | Is it fast enough? | Green/Blue status | Red status | Profile queries, check environment |
+| **Benchmark** | What are the limits? | Search < 100ms | Search > 300ms | Reduce data or migrate to ANN |
+| **Scale** | How does it grow? | Linear curve | Steep/flat curve | Investigate bottlenecks |
+| **Crash Test** | Is data durable? | ✅ PASS | ❌ FAIL | Enable backups, check storage |
+
+---
+
+
+## Recommended Workflow
+
+### Daily Development
+```
+1. Upload new documents
+2. Run quick search tests
+3. Monitor performance metrics
+4. Check status indicator
+```
+
+### Before Deployment
+```
+1. Run full accuracy verification
+2. Execute standard scale test
+3. Verify P95 < 100ms
+4. Run crash recovery test
+5. Export results for documentation
+```
+
+### Troubleshooting
+```
+1. Check performance status
+2. Run benchmark with multiple sizes
+3. Execute scale test
+4. Verify environment (iCloud, storage)
+5. Check logs for errors
+```
+
+---
+
+## Key Takeaways
+
+### ✅ Trust but Verify
+
+Run parity checks regularly. **Perfect Match** = mathematically correct results.
+
+### ⚡ Aim for Green
+
+Target P95 < 50ms for excellent UX. Yellow/Red status = investigate immediately.
+
+### 📈 Expect Linear Scaling
+
+Brute-force is O(N). When the curve steepens, it's time to consider ANN solutions.
+
+### ⚠️ Watch for Environmental Issues
+
+Slow inserts (>10ms) = cloud sync or network storage. Fix the environment, not the code.
+
+### 🎯 Know Your Limits
+
+VectorBench excels at 10K-100K vectors. Beyond that, migrate to purpose-built vector databases.
+
+---
+
+**Ready to dive deeper?** Start with Experiment 1 at http://localhost:8000 or explore the [testing framework](TESTING.md).
