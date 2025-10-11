@@ -18,7 +18,7 @@
 ## 🎓 **New to VectorLiteDB? Start Here!**
 
 - **[QUICK_START.md](QUICK_START.md)** - 5-minute test drive with real questions
-- **[UNDERSTANDING_VECTORLITEDB.md](UNDERSTANDING_VECTORLITEDB.md)** - Deep dive into concepts
+- **[CONCEPTS.md](CONCEPTS.md)** - Deep dive into concepts
 - **[Interactive Learning](learn_vectorlitedb.py)** - Hands-on experiments
 
 ```bash
@@ -68,13 +68,20 @@ python bench.py
 ```
 
 ## Frontend
-The frontend provides a modern, responsive interface for semantic search with the following features:
+The frontend provides a modern, responsive two-column interface with comprehensive search and diagnostic capabilities:
 
-- **Smart API Detection**: Automatically detects the correct API endpoint for local development vs Docker deployment
-- **Search History**: Remembers your last 10 searches for quick re-execution
-- **File Upload**: Upload documents in multiple formats (.txt, .md, .pdf, .docx, .pptx, .xlsx) directly through the web interface
-- **Enhanced UX**: Loading states, error handling, and visual feedback
-- **Keyboard Support**: Press Enter to search
+- **Two-Column Layout**: Left panel for controls and metrics, right panel for search and results
+- **Document Upload**: Multi-format support (.txt, .md, .pdf, .docx, .pptx, .xlsx) with automatic extraction
+- **Performance Metrics**: Real-time tracking of indexed files, queries, P95 latency, and status
+- **Smart Search**: Dropdown file filter, recent search history, keyboard shortcuts
+- **Advanced Diagnostics**: 
+  - Quick Actions (one-click accuracy verification)
+  - Benchmark testing with customizable vector counts (100-2,000)
+  - Scale testing with profiles (quick/standard/thorough)
+  - Accuracy verification with configurable K
+  - System health monitoring
+- **Enhanced UX**: Collapsible sections, skeleton loaders, status indicators, and export functionality
+- **Keyboard Shortcuts**: ⌘T (Run All Tests), ⌘E (Export Results), Enter (Search)
 
 ### Local Development
 Open `frontend/index.html` in your browser (or serve it). It calls the API at `http://127.0.0.1:8000` by default when opened from file://
@@ -104,23 +111,36 @@ The Docker Compose setup includes:
 ## API Endpoints
 
 - `GET /health` - Check API status and vector count
-- `GET /search?q=query&k=5&file=optional` - Semantic search
-- `POST /upload` - Upload and ingest new documents
-- `GET /files` - List all available files in the knowledge base
+- `GET /search?q=query&k=5&file=optional` - Semantic search with optional file filter
+- `POST /upload` - Upload and ingest new documents (multipart/form-data)
+- `GET /files` - List all files with database status and chunk counts
+- `GET /metrics` - Performance metrics (P50/P95 latency, query count)
+- `GET /bench?N=500` - Run benchmark test (default N=500, customizable 100-2000)
+- `GET /parity?K=5` - Verify search accuracy vs NumPy (default K=5)
+- `GET /scale` - Run scalability test across multiple vector counts
 
 ## 🔍 **Built-in Observability**
 
-The web interface includes real-time monitoring:
+The web interface provides comprehensive real-time monitoring and diagnostics:
 
-- **`GET /metrics`** - Live latency tracking (p50/p95)
-- **`GET /bench`** - On-demand performance testing
-- **`GET /parity`** - Accuracy verification vs NumPy
+**Performance Metrics (Auto-updating):**
+- Indexed Files count
+- Total Queries executed
+- P95 Latency tracking
+- Performance Status (Excellent/Good/OK/Slow)
 
-**Web Interface Buttons:**
-- **Refresh Health** → API status and vector count
-- **Refresh Metrics** → Search latency statistics  
-- **Run Quick Bench** → Performance test with 5k vectors
-- **Run Parity Check** → Verify search accuracy
+**Quick Actions:**
+- **✓ Accuracy** → One-click accuracy verification
+
+**Advanced Tests:**
+- **⚡ Quick Benchmark** → Customizable insert/search performance test (100-2,000 vectors)
+- **📊 Scale Test** → Multi-scale performance analysis (Quick/Standard/Thorough profiles)
+- **✓ Accuracy Verification** → Detailed parity check vs NumPy baseline (configurable K)
+- **💚 System Health** → Comprehensive health check with file statistics
+
+**Header Actions:**
+- **Run All Tests** (⌘T) → Execute full diagnostic suite
+- **Export Results** (⌘E) → Copy formatted report to clipboard
 
 ## Customize
 - Drop documents (`.txt`, `.md`, `.pdf`, `.docx`, `.pptx`, `.xlsx`) inside `docs/` and re-run `ingest.py` OR use the web upload feature
