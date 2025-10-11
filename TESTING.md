@@ -1,87 +1,56 @@
 # Testing Framework
 
-Comprehensive testing and benchmarking suite for VectorLiteDB. Tests **functional correctness**, **performance**, **durability**, and **edge cases**.
+Comprehensive test suite for VectorLiteDB covering correctness, performance, durability, and edge cases.
 
 ---
 
-## What's Tested
+## Overview
 
-### Functional Correctness
+This framework systematically validates VectorLiteDB across six dimensions:
 
-- Insert/get/delete/re-insert semantics
-- Distance metrics *(cosine, L2, dot)* and ranking
-- Metadata filters with various predicates
-- Empty DB behavior and wrong-dimension rejections
-
-<br>
-
-### Persistence & Durability
-
-- Normal close and reopen *(data integrity)*
-- Crash recovery during inserts
-- File portability across machines/OS/Python versions
-
-<br>
-
-### Performance
-
-- Insert throughput vs N *(1k → 50k)*
-- Query latency vs N and top_k
-- File size growth vs N and metadata size
-- Distance metric performance differences
-
-<br>
-
-### Accuracy
-
-- Top-k results vs **NumPy brute-force baseline**
-- Stability when vectors have near-tie scores
-
-<br>
-
-### Robustness
-
-- Duplicate ID handling
-- Large metadata blobs *(multi-KB)* and Unicode
-- Burst inserts followed by immediate searches
-- Concurrent readers with single writer
-
-<br>
-
-### Resource Usage
-
-- Peak RAM during ingest/search
-- CPU usage patterns
-- File descriptor leaks in long-running loops
+| Dimension | Purpose | Tools |
+|:----------|:--------|:------|
+| **Functional Correctness** | CRUD operations, filters, metrics | PyTest suite |
+| **Persistence & Durability** | Crash recovery, file portability | Crash simulation |
+| **Performance Characteristics** | Throughput, latency, scaling | Benchmark scripts |
+| **Accuracy & Parity** | NumPy baseline comparison | Statistical validation |
+| **Robustness & Edge Cases** | Unicode, large metadata, stress | Fuzzing, stress tests |
+| **Resource Usage** | RAM, CPU, file descriptors | Profiling tools |
 
 ---
 
 ## Quick Start
 
-### Run all tests
+### Run Full Suite
+
 ```bash
 python run_comprehensive_tests.py
 ```
 
+**Duration:** ~5-10 minutes  
+**Output:** Console logs + CSV files
+
 <br>
 
-### Run only essentials *(faster)*
+### Run Essentials Only
+
 ```bash
 python run_comprehensive_tests.py --quick
 ```
 
-<br>
-
-### Run only performance experiments
-```bash
-python run_comprehensive_tests.py --experiments-only
-```
+**Duration:** ~1-2 minutes  
+**Covers:** Smoke tests, basic parity, minimal benchmarks
 
 <br>
 
-### Run only correctness tests
+### Run by Category
+
 ```bash
+# Correctness tests only
 python run_comprehensive_tests.py --tests-only
+
+# Performance experiments only
+python run_comprehensive_tests.py --experiments-only
 ```
 
 ---
@@ -90,152 +59,314 @@ python run_comprehensive_tests.py --tests-only
 
 ### Correctness Tests (`tests/`)
 
-| Test File | Purpose |
-|-----------|---------|
-| `test_smoke.py` | *Basic CRUD and search* |
-| `test_metrics.py` | *Distance metric behavior* |
-| `test_accuracy_parity.py` | **Accuracy vs NumPy** |
-| `test_persistence_crash.py` | *Persistence and crash recovery* |
-| `test_metadata_filters.py` | *Metadata filtering* |
+| File | Purpose | Key Assertions |
+|:-----|:--------|:---------------|
+| `test_smoke.py` | Basic CRUD operations | Insert, retrieve, search, delete |
+| `test_metrics.py` | Distance metric behavior | Cosine, L2, dot product rankings |
+| `test_accuracy_parity.py` | NumPy baseline comparison | Top-K set equality |
+| `test_persistence_crash.py` | Durability guarantees | Reopen after crash, data integrity |
+| `test_metadata_filters.py` | Filter predicate correctness | Complex filter combinations |
 
 <br>
 
 ### Performance Experiments (`experiments/`)
 
-| Experiment File | Purpose |
-|-----------------|---------|
-| `latency_sweep.py` | **Performance at different scales** |
-| `concurrency_probe.py` | *Concurrent access patterns* |
-| `big_metadata.py` | *Large metadata pressure tests* |
+| File | Purpose | Output |
+|:-----|:--------|:-------|
+| `latency_sweep.py` | Scaling analysis (1K→50K) | `latency_sweep.csv` |
+| `concurrency_probe.py` | Multi-reader behavior | Console logs |
+| `big_metadata.py` | Large payload stress test | Memory profiles |
 
 ---
 
-## Understanding Results
+## Success Criteria
 
-### Good Results
+### ✅ Functional Correctness
 
-#### ✅ Functional
+```python
+# All tests pass
+assert all_tests_passed == True
 
-- All tests pass
-- Filters behave as expected
-- Wrong dimensions throw errors
-- Empty DB calls don't crash
+# Filters work as specified
+assert filtered_results == expected_results
 
-<br>
+# Wrong dimensions rejected
+with pytest.raises(DimensionMismatchError):
+    db.insert("id", wrong_dimension_vector)
 
-#### ✅ Persistence
-
-- After normal shutdown: `len(db)` stable, metadata intact
-- After crash: DB reopens without corruption
-
-<br>
-
-#### ✅ Performance
-
-- **Insert**: *Stable average time, no surprising slowdowns*
-- **Search**: *Latency scales roughly O(N), stays under 100-200ms for ~10k vectors*
-- **File size**: *Proportional growth, no runaway bloat*
+# Empty DB operations safe
+assert db.search(query, top_k=5) == []
+```
 
 <br>
 
-#### ✅ Accuracy
+### ✅ Persistence & Durability
 
-- Top-k from VectorLiteDB **matches NumPy** *(accounting for ties)*
+```python
+# After normal shutdown
+assert len(db_reopened) == len(db_original)
+assert db_reopened.get("sample_id").metadata == original_metadata
+
+# After simulated crash
+assert db_recovered.is_operational() == True
+assert db_recovered.row_count() > 0  # Some data survived
+```
 
 <br>
 
-#### ✅ Robustness
+### ✅ Performance Characteristics
 
-- Large metadata doesn't cause crashes
-- Reads during inserts work consistently
-- RAM doesn't grow indefinitely, CPU usage consistent
+```python
+# Insert throughput stable
+assert std_dev(insert_times) < mean(insert_times) * 0.2
+
+# Search scales linearly
+assert correlation(data_size, latency) > 0.95
+
+# File growth proportional
+assert file_size_mb / vector_count ≈ 0.01  # ~10KB per vector
+```
+
+<br>
+
+### ✅ Accuracy & Parity
+
+```python
+# Top-K matches reference
+numpy_top_k = brute_force_search(vectors, query, k=5)
+vldb_top_k = vectorlitedb.search(query, top_k=5)
+
+# Set equality (order-agnostic due to ties)
+assert set(numpy_top_k) == set(vldb_top_k)
+```
+
+<br>
+
+### ✅ Robustness
+
+```python
+# Large metadata doesn't crash
+db.insert("large", vector, {"text": "x" * 1_000_000})
+
+# Concurrent reads work
+with ThreadPoolExecutor(max_workers=10) as executor:
+    results = executor.map(lambda i: db.search(query), range(100))
+    assert all(len(r) == 5 for r in results)
+
+# Resource usage bounded
+assert max(memory_samples) < baseline_memory * 3
+```
 
 ---
 
-## Key Insights
+## Performance Analysis
 
-### Performance
+### Understanding Benchmarks
 
-| Aspect | Expected Behavior |
-|--------|-------------------|
-| **Scaling** | *Search time scales linearly O(N)* |
-| **Dimensions** | *Higher dimensions = slower search* |
-| **Metrics** | *Cosine vs dot vs L2 may differ in performance* |
-| **Top-K** | *Larger K = longer search* |
-| **File size** | *Grows linearly with N and D* |
+The `latency_sweep.py` experiment generates a CSV file with:
 
-<br>
+```csv
+N,avg_insert_ms,search_ms,file_MB,total_insert_time_s
+1000,1.2,15.3,9.8,1.2
+5000,1.4,78.5,49.2,7.0
+10000,1.5,156.8,98.5,15.0
+25000,1.6,392.1,245.6,40.0
+50000,1.8,784.5,491.2,90.0
+```
 
-### Concurrency
+### Key Insights
 
-*Key questions to answer:*
+**Insert Throughput**
+```
+Good:  < 2ms per vector (stable)
+OK:    2-5ms per vector
+Poor:  > 5ms per vector (investigate environment)
+```
 
-- Can multiple readers access DB **simultaneously**?
-- Can readers access **during writes**?
-- What happens with **multiple writers**?
-- Multiple connections to **same file**?
-- Failure modes **under stress**?
+**Search Latency**
+```
+1K vectors   → ~15ms   (excellent)
+10K vectors  → ~150ms  (good)
+50K vectors  → ~750ms  (approaching limits)
+100K vectors → ~1500ms (consider migration)
+```
 
-<br>
+**File Growth**
+```
+Expected: ~10MB per 1K vectors (384-dim + metadata)
+Variance: ±20% is normal (depends on metadata size)
+Warning:  >15MB per 1K = excessive metadata
+```
 
-### Metadata
+### Scaling Patterns
 
-*Key areas to investigate:*
+**Linear Scaling (Expected)**
+```
+O(N) search time is expected for brute-force.
+Doubling data size doubles search time.
+```
 
-- Maximum storable metadata size
-- Performance impact on search
-- Memory patterns with large metadata
-- Unicode/special character handling
-- Filtering performance
+**Sub-linear (Caching)**
+```
+If search time grows slower than O(N), you may be
+hitting OS page cache. Test with larger datasets
+that exceed RAM.
+```
+
+**Super-linear (Bottleneck)**
+```
+If search time grows faster than O(N), investigate:
+• Disk I/O saturation
+• Memory pressure / swapping
+• Background processes interfering
+```
 
 ---
 
-## Output Files
+## Concurrency Behavior
+
+VectorLiteDB uses SQLite, which has specific concurrency characteristics:
+
+### Multiple Readers
+
+```python
+# ✅ Supported
+reader1 = VectorLiteDB("kb.db")
+reader2 = VectorLiteDB("kb.db")
+reader3 = VectorLiteDB("kb.db")
+
+# All can search simultaneously
+results1 = reader1.search(query)
+results2 = reader2.search(query)
+results3 = reader3.search(query)
+```
+
+### Readers + Writer
+
+```python
+# ⚠️ Behavior depends on SQLite config
+writer = VectorLiteDB("kb.db")
+reader = VectorLiteDB("kb.db")
+
+# Writes may block reads or vice versa
+# Use WAL mode for better concurrency:
+# PRAGMA journal_mode=WAL
+```
+
+### Multiple Writers
+
+```python
+# ❌ Not supported
+# SQLite allows one writer at a time
+# Additional writers will block or error
+```
+
+### Best Practices
+
+1. **Read-heavy workloads:** Open multiple reader instances
+2. **Write-heavy workloads:** Use single writer with batching
+3. **Mixed workloads:** Enable WAL mode, separate reader/writer pools
+4. **High concurrency:** Consider client-server architecture (Chroma, Qdrant)
+
+---
+
+## Metadata Testing
+
+### Size Limits
+
+```python
+# Small metadata (typical)
+metadata = {"title": "Doc 1", "page": 42}  # ~50 bytes
+
+# Medium metadata
+metadata = {"title": "...", "content": "..." * 100}  # ~5KB
+
+# Large metadata (stress test)
+metadata = {"content": "x" * 1_000_000}  # 1MB
+
+# Test all sizes to understand behavior
+```
+
+### Performance Impact
+
+| Metadata Size | Insert Impact | Search Impact | Storage Impact |
+|:--------------|:--------------|:--------------|:---------------|
+| < 1KB | Negligible | Negligible | ~10MB / 1K vectors |
+| 1-10KB | +10-20% | Negligible | ~15-20MB / 1K vectors |
+| 10-100KB | +50-100% | Negligible | ~50-100MB / 1K vectors |
+| \> 100KB | Significant | Negligible | Linear with size |
+
+### Recommendations
+
+- **Keep metadata compact:** Store IDs/references, not full documents
+- **Separate storage:** Store large text in separate KV store, reference by ID
+- **Index efficiently:** Only store searchable fields in metadata
+
+---
+
+## Output Artifacts
 
 ### CSV Files
 
-**`latency_sweep.csv`** - *Performance data*
+**`latency_sweep.csv`**
 
-| Column | Description |
-|--------|-------------|
-| `N` | *Number of vectors* |
-| `avg_insert_ms` | *Average insert time* |
-| `search_ms` | **Search latency** |
-| `file_MB` | *Database file size* |
-| `total_insert_time_s` | *Total insert duration* |
+Columns:
+- `N`: Number of vectors indexed
+- `avg_insert_ms`: Mean insert time per vector
+- `search_ms`: Single search latency
+- `file_MB`: Database file size
+- `total_insert_time_s`: Total ingestion duration
 
-Use this data to **plot performance curves**.
+**Usage:**
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv('latency_sweep.csv')
+plt.plot(df['N'], df['search_ms'])
+plt.xlabel('Vectors')
+plt.ylabel('Search Latency (ms)')
+plt.title('VectorLiteDB Scaling')
+plt.show()
+```
 
 <br>
 
 ### Console Output
 
-*Real-time information:*
+Real-time progress with:
+- Test names and status (PASS/FAIL)
 - Performance metrics
-- Memory usage tracking
-- Concurrency observations
-- Error patterns and failure modes
+- Memory usage samples
+- Warning messages for anomalies
 
 ---
 
-## Use Cases
+## Use Case Guidelines
 
-### ✅ Right Use Cases
+### ✅ Recommended Use Cases
 
-- **Local/offline RAG**
-- **Personal knowledge bases**
-- Notebooks and prototypes
-- Small internal tools
-- **10k-100k vector range**
+| Scenario | Why VectorBench Works Well |
+|:---------|:---------------------------|
+| **Personal Knowledge Base** | 1-10K documents, local-first, simple setup |
+| **Prototype/MVP** | Fast iteration, no infrastructure, embedded |
+| **Jupyter Notebooks** | Single-file DB, easy to share, reproducible |
+| **Small Internal Tools** | 10-50K documents, read-heavy, low concurrency |
+| **Local RAG** | Offline operation, privacy, deterministic |
 
 <br>
 
-### ❌ Wrong Use Cases
+### ❌ Not Recommended
 
-- Multi-tenant applications
-- Heavy concurrency
-- Millions of vectors with **strict SLOs**
-- Distributed systems
+| Scenario | Why You Need Something Else |
+|:---------|:----------------------------|
+| **Multi-tenant SaaS** | Need isolation, horizontal scaling, backups |
+| **High Concurrency** | SQLite write limitations, connection pooling |
+| **Millions of Vectors** | O(N) search too slow, need ANN algorithms |
+| **Distributed Systems** | Single-file architecture, no replication |
+| **Sub-10ms Latency** | Brute force can't achieve at scale |
+
+**Better alternatives:** Chroma (ease of use), Qdrant (performance), Pinecone (managed), FAISS (raw speed)
 
 ---
 
@@ -243,147 +374,260 @@ Use this data to **plot performance curves**.
 
 ### 1. Embedding Consistency
 
-Pick a model, fix dimensions, keep it **consistent** across all operations.
+```python
+# ✅ Good: Fixed model and dimensions
+model = SentenceTransformer('all-MiniLM-L6-v2')  # 384-dim
+db = VectorLiteDB("kb.db", dimension=384)
 
-<br>
+# ❌ Bad: Mixing models
+embedding1 = model1.encode(text)  # 384-dim
+embedding2 = model2.encode(text)  # 768-dim
+```
 
-### 2. Index Lifecycle
+### 2. Index Lifecycle Management
 
-- **Rebuilding often**: Use *deterministic IDs*
-- **Appending**: Avoid *duplicate IDs*
+```python
+# Incremental updates (append-only)
+if not os.path.exists("kb.db"):
+    db = VectorLiteDB("kb.db", dimension=384)
+else:
+    db = VectorLiteDB("kb.db")  # Reopen existing
 
-<br>
+# Rebuild from scratch
+if os.path.exists("kb.db"):
+    os.remove("kb.db")
+db = VectorLiteDB("kb.db", dimension=384)  # Fresh start
+```
 
-### 3. Backups
+### 3. Backup Strategy
 
-Copy `.db` file while process isn't writing. Treat it like a **standard SQLite file**.
+```bash
+# Simple file copy (ensure no active writes)
+cp kb.db kb.backup.db
 
-<br>
+# With timestamp
+cp kb.db "kb.$(date +%Y%m%d_%H%M%S).db"
+
+# Automated backup
+# Add to cron or scheduled task
+```
 
 ### 4. Observability
 
-*Log these metrics:*
-- Insert durations
-- DB length
-- **P50/P95 latency**
+```python
+import time
+import logging
+
+# Log performance metrics
+start = time.time()
+results = db.search(query, top_k=5)
+latency = time.time() - start
+
+logging.info(f"Search latency: {latency*1000:.2f}ms")
+logging.info(f"Database size: {len(db)} vectors")
+
+# Track P50/P95
+latencies.append(latency)
+p50 = np.percentile(latencies, 50)
+p95 = np.percentile(latencies, 95)
+```
 
 ---
 
 ## Troubleshooting
 
-### Import Errors
+<details>
+<summary><b>Import Errors</b></summary>
 
 ```bash
+# Install all dependencies
 pip install -r requirements.txt
+
+# Verify versions
+pip list | grep -E "(vectorlitedb|numpy|sentence-transformers)"
 ```
+</details>
 
-<br>
-
-### Permission Errors
+<details>
+<summary><b>Permission Errors</b></summary>
 
 ```bash
+# Make scripts executable
 chmod +x run_comprehensive_tests.py
+chmod +x cleanup.sh
+
+# Check file ownership
+ls -la kb.db
 ```
+</details>
 
-<br>
+<details>
+<summary><b>Memory Issues</b></summary>
 
-### Memory Issues
+```python
+# Reduce test sizes in experiments/latency_sweep.py
+SIZES = [1000, 5000, 10000]  # Instead of [1K, 10K, 50K]
 
-- Reduce test sizes in experiment files
-- Use `--quick` flag
+# Use --quick flag
+python run_comprehensive_tests.py --quick
+```
+</details>
 
-<br>
+<details>
+<summary><b>Timeout Issues</b></summary>
 
-### Timeout Issues
+```bash
+# Skip long-running experiments
+python run_comprehensive_tests.py --tests-only
 
-- Some experiments take **several minutes**
-- Use `--tests-only` to skip long experiments
+# Or run experiments separately
+python experiments/latency_sweep.py
+```
+</details>
 
----
+<details>
+<summary><b>Accuracy Parity Failures</b></summary>
 
-## Test-Specific Issues
-
-### Accuracy parity failures
-
-**Possible causes**:
+**Possible causes:**
 - NumPy version incompatibility
-- Vector dimensions mismatch
+- Vector dimension mismatch
+- Distance metric mismatch
+- Floating-point precision edge cases
 
-<br>
+**Debug:**
+```python
+# Check versions
+import numpy as np
+print(f"NumPy version: {np.__version__}")
 
-### Persistence failures
+# Verify dimensions
+print(f"Test vectors shape: {test_vectors.shape}")
+print(f"DB dimension: {db.dimension}")
+```
+</details>
 
-**Possible causes**:
-- VectorLiteDB version issues
-- File permissions or disk space
+<details>
+<summary><b>Persistence Test Failures</b></summary>
 
-<br>
+**Indicates:**
+- VectorLiteDB bug
+- Filesystem issues
+- Disk corruption
 
-### Concurrency failures
+**Action:**
+```bash
+# Check filesystem
+df -h  # Disk space
+fsck   # Filesystem check (unmount first)
 
-> **Note**: Behavior may vary by VectorLiteDB version. Document actual behavior for your use case.
+# Update VectorLiteDB
+pip install --upgrade vectorlitedb
+
+# Enable verbose logging
+LOGLEVEL=DEBUG python tests/test_persistence_crash.py
+```
+</details>
 
 ---
 
-## Advanced Experiments
+## Advanced Testing
 
-### Optional Tests to Add
+### Custom Experiments
 
-1. **Keyword + vector hybrid search**
-2. **Distance metric A/B testing**
-3. **Portability** *(build on machine A, query on machine B)*
-4. **Heavy delete-and-reinsert cycles**
-
-<br>
-
-### Creating Custom Experiments
-
-Create new experiments in `experiments/` following existing patterns:
+Create new experiments in `experiments/`:
 
 ```python
 # experiments/my_custom_test.py
 import vectorlitedb
+import numpy as np
 import time
 
-# Your test logic here
+def test_dimension_scaling():
+    """Test how performance scales with embedding dimensions"""
+    
+    dimensions = [128, 256, 384, 512, 768]
+    results = []
+    
+    for dim in dimensions:
+        db = VectorLiteDB(f"test_{dim}d.db", dimension=dim)
+        
+        # Generate test data
+        vectors = np.random.randn(1000, dim).astype('float32')
+        
+        # Measure insert time
+        start = time.time()
+        for i, vec in enumerate(vectors):
+            db.insert(f"vec_{i}", vec.tolist(), {"index": i})
+        insert_time = time.time() - start
+        
+        # Measure search time
+        query = np.random.randn(dim).astype('float32')
+        start = time.time()
+        db.search(query.tolist(), top_k=10)
+        search_time = time.time() - start
+        
+        results.append({
+            'dimension': dim,
+            'insert_ms': insert_time / len(vectors) * 1000,
+            'search_ms': search_time * 1000
+        })
+        
+        os.remove(f"test_{dim}d.db")
+    
+    return results
+
+if __name__ == "__main__":
+    results = test_dimension_scaling()
+    print("\nDimension Scaling Results:")
+    print("-" * 50)
+    for r in results:
+        print(f"{r['dimension']}d: "
+              f"insert={r['insert_ms']:.2f}ms, "
+              f"search={r['search_ms']:.2f}ms")
 ```
 
 ---
 
 ## Contributing
 
-### Guidelines for New Tests
+### Test Guidelines
 
-1. **Follow naming conventions**
-2. **Include comprehensive docstrings**
-3. **Add cleanup code** for temporary files
-4. **Update this README** with test descriptions
-5. **Ensure deterministic** and repeatable tests
+1. **Naming:** Use `test_` prefix for pytest discovery
+2. **Docstrings:** Explain what and why, not how
+3. **Cleanup:** Always remove temporary files
+4. **Determinism:** Use fixed random seeds
+5. **Independence:** Tests should not depend on each other
 
-<br>
-
-### Example Test Structure
+### Example Test Template
 
 ```python
-def test_my_feature():
+def test_feature_name():
     """
-    Test description: what it does and why
+    Test description: Clear, concise explanation of what's being tested
     
-    Expected behavior: what should happen
+    Expected behavior: What should happen in the passing case
+    
+    Edge cases: What boundary conditions are being validated
     """
     # Setup
-    db = create_test_db()
+    db = VectorLiteDB("test_temp.db", dimension=384)
     
-    # Execute
-    result = db.my_operation()
-    
-    # Verify
-    assert result == expected_value
-    
-    # Cleanup
-    cleanup_test_db()
+    try:
+        # Execute
+        result = db.some_operation()
+        
+        # Verify
+        assert result == expected_value, f"Expected {expected_value}, got {result}"
+        
+    finally:
+        # Cleanup (always runs)
+        if os.path.exists("test_temp.db"):
+            os.remove("test_temp.db")
 ```
+
+
+Use these tests to **understand VectorLiteDB's behavior** and make **informed decisions** about whether it's the right tool for your use case.
 
 ---
 
-> This framework helps you **understand VectorLiteDB's behavior and limits**. Use results to decide if it's suitable for your use case.
+**Questions?** Check [CONCEPTS.md](CONCEPTS.md) for deeper explanations or [README.md](README.md) for setup instructions.

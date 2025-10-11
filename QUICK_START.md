@@ -1,192 +1,232 @@
 # Quick Start
 
-Get VectorBench running and verify it works. Takes about **5 minutes**.
+Get up and running in **5 minutes**. This guide covers installation, verification, and common issues.
 
 ---
 
-## Setup
+## Installation
 
 ```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
 # Install dependencies
-python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Ingest documents and start API
+# Ingest sample documents
 python ingest.py
-uvicorn app:app --reload
 
-# Open web interface
-open frontend/index.html
+# Start the API server
+uvicorn app:app --reload
 ```
 
-**API endpoint**: http://127.0.0.1:8000
+Open `frontend/index.html` in your browser or visit http://127.0.0.1:8000
 
 ---
 
-## Verify It Works
+## Verification Checklist
 
-### 1. Check Search Accuracy
+### 1. Accuracy Test
 
-**Action**: Click **"✓ Accuracy"** in *Quick Actions* (web interface)
+Click **"✓ Accuracy"** in the Quick Actions panel.
 
-**Expected result**:
 ```
 ✅ Perfect Match!
 VectorLiteDB results match NumPy baseline
 ```
 
-**What it means**: Search results are mathematically correct. If this fails, something's wrong with the algorithm.
+**What this means:** Your search algorithm is mathematically correct. A mismatch indicates a serious bug.
 
 <br>
 
-### 2. Check Performance
+### 2. Performance Check
 
-Look at the **Performance** section *(auto-refreshes every 5s)*:
+Monitor the **Performance** metrics (auto-updates every 5s):
 
-| Metric | Description |
-|--------|-------------|
-| **Indexed** | Number of files in database |
-| **Queries** | Total searches executed |
-| **Latency (P95)** | *95% of searches complete within this time* |
-| **Status** | Color-coded performance indicator |
-
-<br>
-
-#### **Status Colors**:
-
-- 🟢 **Green** *(< 50ms)* → **Excellent**
-- 🔵 **Blue** *(50-100ms)* → **Good**  
-- 🟡 **Yellow** *(100-300ms)* → **OK**
-- 🔴 **Red** *(> 300ms)* → **Slow**
+| Metric | Meaning |
+|--------|---------|
+| **Indexed** | Files currently in the database |
+| **Queries** | Total search operations executed |
+| **Latency (P95)** | 95th percentile response time |
+| **Status** | Visual health indicator |
 
 <br>
 
-### 3. Run a Benchmark
+**Status Guide:**
 
-**Action**: Click **"⚡ Benchmark"** in *Quick Actions* *(tests 500 vectors)*
-
-**Watch for**:
-- Insert speed **< 5ms** per vector
-- Search time **< 100ms**
-- Any yellow warnings about slow inserts
-
-> **⚠️ Note**: Slow inserts *(> 10ms)* usually mean iCloud sync interference.  
-> **Fix**: Move database to `~/Local/vectorbench-db/`
-
----
-
-## Understanding the Metrics
-
-### Latency
-
-Time from search request to results. Users notice delays over **100ms**.
+```
+🟢 Excellent  < 50ms   │ Production-grade performance
+🔵 Good      50-100ms  │ Acceptable for most use cases
+🟡 OK       100-300ms  │ Usable, but consider optimization
+🔴 Slow       > 300ms  │ Action required
+```
 
 <br>
 
-### P50 vs P95
+### 3. Benchmark Test
 
-- **P50** *(median)*: Half of searches are this fast or faster
-- **P95**: 95% of searches are this fast or faster
+Run a quick benchmark to establish baseline performance:
 
-**Why P95 matters**: It catches slow outliers that median might hide.
+```
+Click "⚡ Benchmark" → Tests 500 vectors in ~10s
+```
 
-<br>
+**Key metrics to watch:**
+- **Insert speed:** Should be < 5ms/vector on local SSD
+- **Search time:** Target < 100ms
+- **Warnings:** Yellow alerts indicate environmental issues
 
-### Parity Check
-
-Compares VectorLiteDB to a *"gold standard"* NumPy implementation. Both search **1000 random vectors** - if top results match, accuracy is verified.
+> **⚠️ Common Issue:** Insert times > 10ms usually indicate iCloud sync interference.
+>
+> **Fix:**
+> ```bash
+> mkdir -p ~/Local/vectorbench-db
+> ln -s ~/Local/vectorbench-db/kb.db kb.db
+> ```
 
 ---
 
 ## Performance Expectations
 
-| Documents | Search Time | File Size | Notes |
-|-----------|-------------|-----------|-------|
-| **1,000** | *5-20ms* | ~10MB | *Development* |
-| **10,000** | *20-100ms* | ~100MB | **Typical usage** |
-| **50,000** | *100-500ms* | ~500MB | *Upper limit* |
-| **100,000+** | *>500ms* | >1GB | *Consider alternatives* |
+| Scale | Search Latency | File Size | Recommended For |
+|------:|---------------:|----------:|:----------------|
+| 1K | 5-20ms | ~10MB | Development/testing |
+| 10K | 20-100ms | ~100MB | **Production sweet spot** |
+| 50K | 100-500ms | ~500MB | Upper practical limit |
+| 100K+ | >500ms | >1GB | Consider alternatives |
 
 ---
 
-## Common Issues
+## Key Concepts
 
-### "API not reachable"
+### Latency (P50 vs P95)
 
-**Cause**: API server isn't running
+- **P50 (median):** Half of all requests are faster
+- **P95:** 95% of requests complete within this time
 
-**Fix**:
+We track **P95** because it captures the worst experience most users will encounter. A healthy system keeps P95 < 2× P50.
+
+<br>
+
+### Parity Checks
+
+Validates correctness by comparing VectorLiteDB results against a NumPy brute-force reference implementation across 1,000 random vectors.
+
+<br>
+
+### File Growth
+
+Each 384-dimensional vector + metadata consumes ~2-5KB of storage. Budget approximately **10MB per 1,000 vectors**.
+
+---
+
+## Troubleshooting
+
+<details>
+<summary><b>❌ "API not reachable"</b></summary>
+
+The backend server isn't running.
+
 ```bash
 uvicorn app:app --reload
 ```
 
-<br>
+Verify it's accessible at http://127.0.0.1:8000/health
+</details>
 
-### Slow benchmarks *(>30s for N=500)*
+<details>
+<summary><b>🐌 Benchmarks taking >30s for N=500</b></summary>
 
-**Cause**: iCloud Drive is syncing your database
+**Root cause:** macOS iCloud Drive sync
 
-**Fix**:
+**Solution:**
 ```bash
+# Move database to non-synced location
 mkdir -p ~/Local/vectorbench-db
+mv kb.db ~/Local/vectorbench-db/
 ln -s ~/Local/vectorbench-db/kb.db kb.db
+
+# Verify fix
+ls -lah kb.db  # Should show symlink (->)
 ```
 
-<br>
+**Why this works:** iCloud adds 50-100x latency to SQLite writes.
+</details>
 
-### "Mismatch detected" in parity check
+<details>
+<summary><b>⚠️ "Mismatch detected" in parity check</b></summary>
 
-**Cause**: VectorLiteDB results don't match NumPy baseline
+Search results don't match the NumPy baseline.
 
-**Fix**: Check your VectorLiteDB version or rebuild the database
+**Possible causes:**
+- Outdated VectorLiteDB version
+- Corrupted database file
+- Floating-point precision edge cases
 
-<br>
+**Resolution:**
+```bash
+pip install --upgrade vectorlitedb
+python ingest.py  # Rebuild database
+```
+</details>
 
-### Large file sizes
+<details>
+<summary><b>💾 Large database files</b></summary>
 
-**Explanation**: *Normal behavior*. Each chunk with **384-dim vector** + metadata = ~2-5 KB
+**This is normal behavior.** Vector embeddings are large:
 
-**Expected**: ~10 MB per **1,000 vectors**
+```
+384 dimensions × 4 bytes (float32) = 1.5KB per vector
++ metadata (variable)
++ SQLite overhead
+≈ 2-5KB per document chunk
+```
+
+Expected growth: **~10MB per 1,000 indexed chunks**
+</details>
 
 ---
 
-## Testing Scale
+## Scale Testing
 
-Click **"📊 Scale"** in *Quick Actions* or expand **Advanced Tests** for custom profiles:
+Test how performance degrades with increasing data:
 
-| Profile | Sizes | Time |
-|---------|-------|------|
-| **Quick** | *100, 250, 500 vectors* | ~20s |
-| **Standard** | *500, 1K, 2K vectors* | ~1min |
-| **Thorough** | *1K, 2.5K, 5K vectors* | ~3min |
+| Profile | Test Sizes | Duration | Purpose |
+|:--------|:-----------|:---------|:--------|
+| **Quick** | 100, 250, 500 | ~20s | Daily health check |
+| **Standard** | 500, 1K, 2K | ~1min | Sprint validation |
+| **Thorough** | 1K, 2.5K, 5K | ~3min | Release qualification |
 
-**Output**: Graph showing search time vs database size. *Linear growth is expected* (brute force algorithm).
+The output graph shows search latency vs database size. **Linear growth is expected** (brute-force algorithm).
 
 ---
 
 ## Next Steps
 
-1. **Upload** your own documents via the web interface
-2. **Search** and watch metrics in real-time
-3. **Benchmark** with different sizes to find your limits
-4. **Learn** more in [CONCEPTS.md](CONCEPTS.md)
+- **Experiment:** Upload your own documents and run searches
+- **Monitor:** Watch real-time metrics during usage
+- **Benchmark:** Test different scales to find your breaking point
+- **Learn:** Deep dive into [CONCEPTS.md](CONCEPTS.md)
 
 ---
 
-## When to Use VectorBench
+## Decision Matrix
 
-### ✅ Good For
+### ✅ Use VectorBench When
 
-- Personal knowledge bases
-- Local RAG apps
-- Prototyping
-- **10k-100k documents**
+- Building personal knowledge bases
+- Developing local RAG applications
+- Prototyping semantic search features
+- Working with **10K-100K documents**
+- Prioritizing simplicity over scale
 
-### ❌ Consider Alternatives
+### 🔄 Consider Alternatives When
 
-**chromadb, lancedb, qdrant, FAISS** when you need:
+You need sub-10ms latency, millions of documents, concurrent writes, or distributed deployment.
 
-- Sub-10ms search times
-- Millions of documents
-- Concurrent writes
-- Distributed deployment
+**Alternatives:** [Chroma](https://www.trychroma.com/), [LanceDB](https://lancedb.com/), [Qdrant](https://qdrant.tech/), [FAISS](https://github.com/facebookresearch/faiss)
+
+---
+
+**Questions?** Check [CONCEPTS.md](CONCEPTS.md) for deeper explanations or [TESTING.md](TESTING.md) for the testing framework.
