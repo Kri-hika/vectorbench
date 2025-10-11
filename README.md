@@ -14,14 +14,7 @@ Playing around with vector databases locally. Ingests documents, generates embed
 - FastAPI + Uvicorn
 - Optional: Docker/docker-compose
 
-- **[QUICK_START.md](QUICK_START.md)** - 5-minute test drive with real questions
-- **[CONCEPTS.md](CONCEPTS.md)** - Deep dive into concepts
-- **[Interactive Learning](learn_vectorlitedb.py)** - Hands-on experiments
-
-```bash
-# Try the interactive learning lab
-python learn_vectorlitedb.py
-```
+## Quick Start
 
 ```bash
 # Setup
@@ -41,21 +34,12 @@ python cli_search.py "example query"
 
 Open `frontend/index.html` in a browser for the web interface.
 
-## Frontend
-The frontend provides a modern, responsive two-column interface with comprehensive search and diagnostic capabilities:
+## Learning Resources
 
-- **Two-Column Layout**: Left panel for controls and metrics, right panel for search and results
-- **Document Upload**: Multi-format support (.txt, .md, .pdf, .docx, .pptx, .xlsx) with automatic extraction
-- **Performance Metrics**: Real-time tracking of indexed files, queries, P95 latency, and status
-- **Smart Search**: Dropdown file filter, recent search history, keyboard shortcuts
-- **Advanced Diagnostics**: 
-  - Quick Actions (one-click accuracy verification)
-  - Benchmark testing with customizable vector counts (100-2,000)
-  - Scale testing with profiles (quick/standard/thorough)
-  - Accuracy verification with configurable K
-  - System health monitoring
-- **Enhanced UX**: Collapsible sections, skeleton loaders, status indicators, and export functionality
-- **Keyboard Shortcuts**: ⌘T (Run All Tests), ⌘E (Export Results), Enter (Search)
+If you're new to VectorLiteDB:
+- [QUICK_START.md](QUICK_START.md) - 5-minute walkthrough
+- [CONCEPTS.md](CONCEPTS.md) - How vector search actually works
+- `python learn_vectorlitedb.py` - Interactive experiments
 
 ## Web Interface
 
@@ -105,26 +89,17 @@ GET  /scale                       # Multi-scale performance test
 
 ## Benchmarking
 
-The web interface provides comprehensive real-time monitoring and diagnostics:
+Via web interface:
+- Quick benchmark: customizable vector counts (100-2000)
+- Scale test: multiple sizes with timing
+- Accuracy verification: compare against NumPy ground truth
 
-**Performance Metrics (Auto-updating):**
-- Indexed Files count
-- Total Queries executed
-- P95 Latency tracking
-- Performance Status (Excellent/Good/OK/Slow)
+Via CLI:
+```bash
+python bench.py
+```
 
-**Quick Actions:**
-- **✓ Accuracy** → One-click accuracy verification
-
-**Advanced Tests:**
-- **⚡ Quick Benchmark** → Customizable insert/search performance test (100-2,000 vectors)
-- **📊 Scale Test** → Multi-scale performance analysis (Quick/Standard/Thorough profiles)
-- **✓ Accuracy Verification** → Detailed parity check vs NumPy baseline (configurable K)
-- **💚 System Health** → Comprehensive health check with file statistics
-
-**Header Actions:**
-- **Run All Tests** (⌘T) → Execute full diagnostic suite
-- **Export Results** (⌘E) → Copy formatted report to clipboard
+## Configuration
 
 - Add documents to `docs/` and run `python ingest.py` (or upload via web)
 - Change distance metric in `VectorLiteDB()`: `cosine` (default), `l2`, `dot`
