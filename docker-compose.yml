@@ -1,0 +1,24 @@
+services:
+  api:
+    build: .
+    container_name: vectorbench-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./docs:/app/docs
+      - ./kb.db:/app/kb.db
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  frontend:
+    image: nginx:alpine
+    container_name: vectorbench-frontend
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped

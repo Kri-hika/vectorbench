@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VectorBench – Local Vector Search</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="header-left">
+          <h1>🔎 VectorBench</h1>
+          <span class="version-info">Local Vector Search & Benchmarking</span>
+        </div>
+        <div class="header-right">
+          <div id="status" class="status-badge status-connecting">
+            <span class="status-dot"></span>
+            <span class="status-text">Connecting...</span>
+      </div>
+          <button class="action-button" onclick="runAllTests()" title="Run complete diagnostic suite (⌘T)">
+            <span class="button-icon">🧪</span>
+            <span class="button-text">Run All Tests</span>
+          </button>
+          <button class="action-button" onclick="exportResults()" title="Export test results (⌘E)" id="export-btn" style="display: none;">
+            <span class="button-icon">📊</span>
+            <span class="button-text">Export</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Layout: Two Columns -->
+    <div class="main-layout">
+      
+      <!-- LEFT PANEL: Controls & Metrics -->
+      <aside class="left-panel">
+        
+        <!-- Upload Section -->
+        <section class="panel-section">
+          <h3>📤 Upload Documents</h3>
+          <div class="upload-form">
+            <input id="fileUpload" type="file" accept=".txt,.md,.pdf,.docx,.pptx,.xlsx" class="file-input" />
+            <button id="uploadBtn" class="btn-secondary">Upload & Index</button>
+          </div>
+          <div id="uploadStatus" class="status-message"></div>
+        </section>
+
+        <!-- Metrics Cards -->
+        <section class="panel-section">
+          <h3>📊 Performance</h3>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-label">Indexed</div>
+              <div class="metric-value" id="file-count">—</div>
+              <div class="metric-helper">files</div>
+            </div>
+          <div class="metric-card">
+              <div class="metric-label">Queries</div>
+              <div class="metric-value" id="query-count">—</div>
+              <div class="metric-helper">total</div>
+            </div>
+            <div class="metric-card" id="latency-card">
+              <div class="metric-label">Latency</div>
+            <div class="metric-value" id="p95-latency">—</div>
+              <div class="metric-helper">p95</div>
+            </div>
+            <div class="metric-card" id="performance-status">
+              <div class="metric-label">Status</div>
+              <div class="metric-value" id="perf-status-text">—</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Quick Actions -->
+        <section class="panel-section">
+          <h3>⚡ Quick Actions</h3>
+          <div class="quick-actions-grid">
+            <button class="quick-action-btn" onclick="document.getElementById('run-bench').click()" title="Run quick performance test">
+              <span class="qa-icon">⚡</span>
+              <span class="qa-label">Benchmark</span>
+            </button>
+            <button class="quick-action-btn" onclick="document.getElementById('run-parity').click()" title="Verify accuracy">
+              <span class="qa-icon">✓</span>
+              <span class="qa-label">Accuracy</span>
+            </button>
+            <button class="quick-action-btn" onclick="document.getElementById('refresh-health').click()" title="Refresh system status">
+              <span class="qa-icon">🔄</span>
+              <span class="qa-label">Health</span>
+            </button>
+            <button class="quick-action-btn" onclick="document.getElementById('run-scale-test').click()" title="Test scalability">
+              <span class="qa-icon">📊</span>
+              <span class="qa-label">Scale</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Latency Chart (Collapsible) -->
+        <section class="panel-section">
+          <h3 class="section-header" onclick="toggleSection('latency-section')">
+            📈 Latency Chart
+            <span class="collapse-icon collapsed">▶</span>
+          </h3>
+          <div id="latency-section" class="collapsible-content" style="display: none;">
+            <div class="chart-wrapper">
+              <canvas id="latencyChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- Advanced Diagnostics (Collapsed by default) -->
+        <section class="panel-section">
+          <h3 class="section-header" onclick="toggleSection('diagnostics-section')">
+            🧪 Advanced Tests
+            <span class="collapse-icon collapsed">▶</span>
+          </h3>
+          <div id="diagnostics-section" class="collapsible-content" style="display: none;">
+            
+            <!-- Benchmark Controls -->
+            <div class="test-control-group">
+              <div class="test-header">
+                <span class="test-icon">⚡</span>
+                <div>
+                  <div class="test-title">Quick Benchmark</div>
+                  <div class="test-description">Test insert & search performance</div>
+                </div>
+              </div>
+              <div class="test-options">
+                <label>
+                  <span>Vector Count:</span>
+                  <select id="bench-size" class="input-secondary">
+                    <option value="100">100 (Fast - ~2s)</option>
+                    <option value="500" selected>500 (Recommended - ~10s)</option>
+                    <option value="1000">1,000 (Thorough - ~30s)</option>
+                    <option value="2000">2,000 (Advanced - ~1min)</option>
+                  </select>
+                </label>
+                <button id="run-bench" class="btn-action">Run Benchmark</button>
+              </div>
+              <div id="bench-results" class="diagnostic-result"></div>
+          </div>
+          
+            <!-- Scale Test Controls -->
+            <div class="test-control-group">
+              <div class="test-header">
+                <span class="test-icon">📊</span>
+                <div>
+                  <div class="test-title">Scale Test</div>
+                  <div class="test-description">Test how performance scales with size</div>
+                </div>
+              </div>
+              <div class="test-options">
+                <label>
+                  <span>Test Profile:</span>
+                  <select id="scale-profile" class="input-secondary">
+                    <option value="quick" selected>Quick (100, 250, 500 - ~20s)</option>
+                    <option value="standard">Standard (500, 1K, 2K - ~1min)</option>
+                    <option value="thorough">Thorough (1K, 2.5K, 5K - ~3min)</option>
+                  </select>
+                </label>
+                <button id="run-scale-test" class="btn-action">Run Scale Test</button>
+              </div>
+              <div id="scale-chart-container" class="diagnostic-result">
+                <canvas id="scaleChart"></canvas>
+          </div>
+        </div>
+        
+            <!-- Accuracy Check -->
+            <div class="test-control-group">
+              <div class="test-header">
+                <span class="test-icon">✓</span>
+                <div>
+                  <div class="test-title">Accuracy Verification</div>
+                  <div class="test-description">Verify search results match NumPy baseline</div>
+                </div>
+              </div>
+              <div class="test-options">
+                <label>
+                  <span>Test Size:</span>
+                  <select id="parity-size" class="input-secondary">
+                    <option value="5" selected>5 Results (Quick - ~1s)</option>
+                    <option value="10">10 Results (Standard - ~2s)</option>
+                    <option value="20">20 Results (Thorough - ~3s)</option>
+                  </select>
+                </label>
+                <button id="run-parity" class="btn-action">Run Accuracy Check</button>
+              </div>
+              <div id="parity-results" class="diagnostic-result"></div>
+        </div>
+        
+            <!-- System Health -->
+            <div class="test-control-group">
+              <div class="test-header">
+                <span class="test-icon">🔄</span>
+                <div>
+                  <div class="test-title">System Health</div>
+                  <div class="test-description">Check API connection & database status</div>
+                </div>
+              </div>
+              <div class="test-options" style="grid-template-columns: 1fr;">
+                <button id="refresh-health" class="btn-action" style="width: 100%;">Refresh Status & Metrics</button>
+              </div>
+              <div id="health-results" class="diagnostic-result" style="display: none;"></div>
+        </div>
+        
+          </div>
+        </section>
+
+      </aside>
+
+      <!-- RIGHT PANEL: Search & Results -->
+      <main class="right-panel">
+        
+        <!-- Search Section -->
+        <section class="panel-section search-section-right">
+          <h3>🔍 Search</h3>
+          <div class="search-form">
+            <input id="q" type="text" placeholder="Ask something... (⌘K)" class="input-primary" />
+            <div class="search-options">
+              <input id="k" type="number" min="1" max="20" value="5" placeholder="Results" />
+              <div class="file-filter-group">
+                <select id="file" class="input-secondary">
+                  <option value="">All Files</option>
+                </select>
+                <button id="refresh-files" class="btn-icon" onclick="loadFileOptions()" title="Refresh file list">⟳</button>
+              </div>
+            </div>
+            <button id="go" class="btn-primary">Search (⌘↵)</button>
+          </div>
+        </section>
+        
+        <!-- Recent Searches -->
+        <section class="panel-section" id="searchHistory" style="display: none;">
+          <h3>🕐 Recent Searches</h3>
+          <div id="searchHistoryContent" class="history-chips"></div>
+        </section>
+
+        <!-- Search Results -->
+        <section class="panel-section results-section">
+          <div class="results-header">
+            <h3>📄 Search Results</h3>
+            <div class="results-actions">
+              <span id="results-count" class="results-count"></span>
+              <button class="btn-icon" onclick="copyResults()" title="Copy to clipboard" id="copy-btn" style="display: none;">
+                📋
+              </button>
+            </div>
+          </div>
+          <div id="results" class="results-container"></div>
+          <div id="results-empty" class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <p>No searches yet</p>
+            <p class="empty-hint">Use the search box above to find information in your documents</p>
+            <p class="empty-hint">Keyboard shortcuts: ⌘K to focus, ⌘↵ to search, Esc to clear</p>
+          </div>
+        </section>
+
+      </main>
+
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
