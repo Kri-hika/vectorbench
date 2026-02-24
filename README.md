@@ -84,14 +84,13 @@ GET  /files                       # List files with chunk counts
 GET  /metrics                     # P50/P95 latency, query count
 GET  /bench?N=500                 # Benchmark (100-2000 vectors)
 GET  /parity?K=5                  # Accuracy check vs NumPy
-GET  /scale                       # Multi-scale performance test
 ```
 
 ## Benchmarking
 
 Via web interface:
 - Quick benchmark: customizable vector counts (100-2000)
-- Scale test: multiple sizes with timing
+- Scale test: runs `/bench` sequentially across multiple sizes (100/250/500, 500/1K/2K, or 1K/2.5K/5K) and plots latency vs. vector count
 - Accuracy verification: compare against NumPy ground truth
 
 Via CLI:
@@ -117,15 +116,19 @@ By design:
 
 ### macOS iCloud Sync Warning
 
-If benchmarks are taking >30s for N=500, you're probably hitting iCloud sync overhead. macOS syncs `~/Documents` by default, causing 50-100x slowdown on SQLite writes.
+**Required prerequisite on macOS:** The `/bench` endpoint writes its temporary database to `~/Local/vectorbench-db/`. This directory must exist before you run any benchmark, or the endpoint will fail with a file-not-found error:
 
-Fix: symlink the database outside iCloud sync:
 ```bash
 mkdir -p ~/Local/vectorbench-db
+```
+
+If your project lives under `~/Documents` (synced by iCloud by default), also symlink the main database to avoid 50-100x write slowdowns on SQLite:
+
+```bash
 ln -s ~/Local/vectorbench-db/kb.db kb.db
 ```
 
-Check if you're affected: `ls -la ~/Documents | head -3` (look for `@` symbols in permissions)
+Check if you're affected by iCloud sync: `ls -la ~/Documents | head -3` (look for `@` symbols in permissions)
 
 ### SQLite Write Characteristics
 
