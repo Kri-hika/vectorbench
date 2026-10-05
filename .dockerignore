@@ -1,0 +1,13 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+*.db
+data/
+docs/
+experiments/
+tests/
+k8s/
+*.md
+*.csv

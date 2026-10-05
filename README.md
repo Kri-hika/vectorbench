@@ -64,7 +64,7 @@ Without compose:
 docker build -t vectorbench .
 docker run --rm -p 8000:8000 \
   -v "$PWD/docs:/app/docs" \
-  -v "$PWD/kb.db:/app/kb.db" vectorbench
+  -v "$PWD/data:/app/data" vectorbench
 ```
 
 With compose:
@@ -74,6 +74,23 @@ docker compose up --build
 # Frontend: http://127.0.0.1:5173
 ```
 
+The index lives in `data/kb.db`. On start, `ingest.py` re-embeds only files that changed since the
+last run and drops files that were deleted; `python ingest.py --rebuild` starts from scratch.
+
+## Kubernetes (local, kind)
+
+```bash
+docker build -t vectorbench-api:local .
+kind create cluster --name vectorbench
+kind load docker-image vectorbench-api:local --name vectorbench
+kubectl apply -f k8s/vectorbench.yaml
+kubectl rollout status deployment/vectorbench-api
+kubectl port-forward service/vectorbench-api 8000:8000   # then open frontend/index.html
+```
+
+Runs one replica by design: the index is a single file with one writer, so the volume is
+ReadWriteOnce and rollouts use `Recreate`. Uploaded documents persist on the same volume.
+
 ## API Endpoints
 
 ```
@@ -81,8 +98,8 @@ GET  /health                      # Status and vector count
 GET  /search?q=...&k=5&file=...   # Semantic search (optional file filter)
 POST /upload                      # Upload document (multipart form)
 GET  /files                       # List files with chunk counts
-GET  /metrics                     # P50/P95 latency, query count
-GET  /bench?N=500                 # Benchmark (100-2000 vectors)
+GET  /metrics                     # P50/P95 latency (end-to-end, embed, search), query count
+GET  /bench?N=500                 # Benchmark (bulk insert + search, temp dir)
 GET  /parity?K=5                  # Accuracy check vs NumPy
 ```
 
@@ -116,16 +133,13 @@ By design:
 
 ### macOS iCloud Sync Warning
 
-**Required prerequisite on macOS:** The `/bench` endpoint writes its temporary database to `~/Local/vectorbench-db/`. This directory must exist before you run any benchmark, or the endpoint will fail with a file-not-found error:
+`/bench` and `/parity` now run in a system temp directory, so they need no setup.
+
+If your project lives under `~/Documents` (synced by iCloud by default), keep the main index outside it to avoid 50-100x write slowdowns. Either point the app at another path, or symlink `kb.db` (saves write through the link):
 
 ```bash
 mkdir -p ~/Local/vectorbench-db
-```
-
-If your project lives under `~/Documents` (synced by iCloud by default), also symlink the main database to avoid 50-100x write slowdowns on SQLite:
-
-```bash
-ln -s ~/Local/vectorbench-db/kb.db kb.db
+export VB_DB_PATH=~/Local/vectorbench-db/kb.db    # or: ln -s ~/Local/vectorbench-db/kb.db kb.db
 ```
 
 Check if you're affected by iCloud sync: `ls -la ~/Documents | head -3` (look for `@` symbols in permissions)
