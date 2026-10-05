@@ -1,11 +1,12 @@
-vectorlitedb>=0.1.0
+vectorlitedb==0.1.0  # store.py relies on 0.1.0 internals; re-check before upgrading
 fastapi>=0.111
 uvicorn>=0.30
 sentence-transformers>=3.0
 numpy>=1.26
 pytest>=8.2
+httpx>=0.27  # FastAPI TestClient
 python-multipart>=0.0.20
-PyPDF2>=3.0.0
+pypdf>=4.0.0
 python-docx>=0.8.11
 python-pptx>=0.6.21
 openpyxl>=3.1.0

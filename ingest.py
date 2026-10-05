@@ -1,160 +1,85 @@
+"""Incrementally sync the index with the files in the docs directory.
+
+Unchanged files (same SHA-256 as when indexed) are skipped, changed files are re-embedded,
+and files that were removed from disk are removed from the index. Pass --rebuild to start over.
+Runs before the API starts in Docker and Kubernetes, so restarts no longer re-embed everything.
+"""
+from __future__ import annotations
+
+import argparse
 import os
-import glob
-import io
-from typing import List
-from sentence_transformers import SentenceTransformer
-from vectorlitedb import VectorLiteDB
+import sys
+from typing import List, Optional
 
-# Document parsing imports
-import PyPDF2
-from docx import Document
-from pptx import Presentation
-import openpyxl
+import pipeline
+from pipeline import Embedder, ExtractionError
+from store import Index
 
-DB_PATH = "kb.db"
-EMBED_MODEL = "all-MiniLM-L6-v2"  # 384-dim
-CHUNK_CHARS = 800                  # ~200 words
 
-def chunk_text(t: str, n: int) -> List[str]:
-    return [t[i:i + n] for i in range(0, len(t), n)] if t else []
+def sync(index: Index, docs_dir: str, embed: Embedder) -> dict:
+    summary = {"indexed": 0, "unchanged": 0, "removed": 0, "failed": 0, "chunks": 0}
+    paths = pipeline.list_source_files(docs_dir)
+    on_disk = {os.path.basename(p) for p in paths}
 
-# Document parsing functions (same as in app.py)
-def extract_text_from_pdf(content: bytes) -> str:
-    """Extract text from PDF content"""
-    try:
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() + "\n"
-        return text.strip()
-    except Exception as e:
-        raise Exception(f"Failed to parse PDF: {str(e)}")
+    for name in sorted(set(index.file_stats()) - on_disk):
+        index.delete_file(name)
+        summary["removed"] += 1
+        print(f"Removed {name} (no longer in {docs_dir})")
 
-def extract_text_from_docx(content: bytes) -> str:
-    """Extract text from DOCX content"""
-    try:
-        doc = Document(io.BytesIO(content))
-        text = ""
-        for paragraph in doc.paragraphs:
-            text += paragraph.text + "\n"
-        return text.strip()
-    except Exception as e:
-        raise Exception(f"Failed to parse DOCX: {str(e)}")
-
-def extract_text_from_pptx(content: bytes) -> str:
-    """Extract text from PPTX content"""
-    try:
-        prs = Presentation(io.BytesIO(content))
-        text = ""
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                if hasattr(shape, "text"):
-                    text += shape.text + "\n"
-        return text.strip()
-    except Exception as e:
-        raise Exception(f"Failed to parse PPTX: {str(e)}")
-
-def extract_text_from_xlsx(content: bytes) -> str:
-    """Extract text from XLSX content"""
-    try:
-        workbook = openpyxl.load_workbook(io.BytesIO(content))
-        text = ""
-        for sheet_name in workbook.sheetnames:
-            sheet = workbook[sheet_name]
-            for row in sheet.iter_rows(values_only=True):
-                row_text = " ".join(str(cell) for cell in row if cell is not None)
-                if row_text.strip():
-                    text += row_text + "\n"
-        return text.strip()
-    except Exception as e:
-        raise Exception(f"Failed to parse XLSX: {str(e)}")
-
-def extract_text_from_file(file_path: str) -> str:
-    """Extract text from various file formats"""
-    file_ext = file_path.lower().split('.')[-1]
-    
-    with open(file_path, 'rb') as f:
-        content = f.read()
-    
-    if file_ext == 'txt':
-        return content.decode('utf-8', errors='ignore')
-    elif file_ext == 'md':
-        return content.decode('utf-8', errors='ignore')
-    elif file_ext == 'pdf':
-        return extract_text_from_pdf(content)
-    elif file_ext == 'docx':
-        return extract_text_from_docx(content)
-    elif file_ext == 'pptx':
-        return extract_text_from_pptx(content)
-    elif file_ext == 'xlsx':
-        return extract_text_from_xlsx(content)
-    else:
-        raise Exception(f"Unsupported file type: .{file_ext}")
-
-def main() -> None:
-    # For demo: rebuild each time
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-
-    print("Loading embedding model...", EMBED_MODEL)
-    model = SentenceTransformer(EMBED_MODEL)
-
-    print("Opening VectorLiteDB...", DB_PATH)
-    db = VectorLiteDB(DB_PATH, dimension=384, distance_metric="cosine")
-
-    # Find all supported files
-    patterns = ["docs/*.txt", "docs/*.md", "docs/*.pdf", "docs/*.docx", "docs/*.pptx", "docs/*.xlsx"]
-    files = []
-    for pattern in patterns:
-        files.extend(glob.glob(pattern))
-    
-    # Filter out .txt files that are just extracted text versions
-    original_files = []
-    for f in files:
-        filename = os.path.basename(f)
-        # Skip .txt files that are extracted versions of other files
-        if not (filename.endswith('.txt') and any(filename.replace('.txt', ext) in [os.path.basename(g) for g in files] for ext in ['.pdf', '.docx', '.pptx', '.xlsx'])):
-            original_files.append(f)
-    
-    if not original_files:
-        print("No docs found in docs/ — add supported files (.txt, .md, .pdf, .docx, .pptx, .xlsx) and re-run.")
-        return
-
-    total_chunks = 0
-    for path in original_files:
-        try:
-            print(f"Processing {path}...")
-            text = extract_text_from_file(path)
-            
-            if not text.strip():
-                print(f"Warning: No text content found in {path}")
-                continue
-                
-            chunks = chunk_text(text, CHUNK_CHARS)
-            if not chunks:
-                print(f"Warning: No chunks created from {path}")
-                continue
-                
-            for idx, chunk in enumerate(chunks):
-                vec = model.encode(chunk).tolist()  # 384 floats
-                uid = f"{os.path.basename(path)}::{idx}"
-                file_type = os.path.basename(path).lower().split('.')[-1]
-                meta = {
-                    "file": os.path.basename(path), 
-                    "index": idx, 
-                    "chunk": chunk,
-                    "file_type": file_type
-                }
-                db.insert(id=uid, vector=vec, metadata=meta)
-                total_chunks += 1
-            print(f"Ingested {len(chunks)} chunks from {path}")
-            
-        except Exception as e:
-            print(f"Error processing {path}: {str(e)}")
+    for path in paths:
+        name = os.path.basename(path)
+        with open(path, "rb") as f:
+            content = f.read()
+        sha = pipeline.sha256_bytes(content)
+        if index.file_sha256(name) == sha:
+            summary["unchanged"] += 1
             continue
+        try:
+            extraction = pipeline.extract_text(content, name)
+            text = pipeline.require_text(extraction)
+        except ExtractionError as e:
+            summary["failed"] += 1
+            print(f"Skipped {name}: {e}")
+            continue
+        chunks = pipeline.chunk_text(text)
+        n = index.replace_file(name, chunks, embed(chunks), {"sha256": sha})
+        summary["indexed"] += 1
+        summary["chunks"] += n
+        note = f" ({extraction.pages_without_text} pages had no text layer)" if extraction.pages_without_text else ""
+        print(f"Indexed {name}: {n} chunks{note}")
+    return summary
 
-    print(f"Done. Total chunks: {total_chunks}; DB len: {len(db)}")
-    print(f"DB file: {DB_PATH} (bytes: {os.path.getsize(DB_PATH)})")
+
+def main(argv: Optional[List[str]] = None, embedder: Optional[Embedder] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--docs", default=pipeline.DOCS_DIR, help="documents directory")
+    parser.add_argument("--db", default=pipeline.DB_PATH, help="index file path")
+    parser.add_argument("--rebuild", action="store_true", help="delete the index and re-embed every file")
+    args = parser.parse_args(argv)
+
+    os.makedirs(args.docs, exist_ok=True)
+    if args.rebuild and os.path.exists(args.db):
+        os.remove(os.path.realpath(args.db))  # keep a symlinked kb.db's link in place
+
+    index = Index(args.db, dimension=pipeline.EMBED_DIM)
+    paths = pipeline.list_source_files(args.docs)
+    if not paths and not len(index):
+        print(f"No documents in {args.docs}/ yet; add files there or upload them through the API.")
+        return 0
+
+    loaded: List[Embedder] = []
+
+    def embed(texts: List[str]) -> List[List[float]]:
+        # Load the model only if some file actually needs embedding, so a no-change restart stays fast.
+        if not loaded:
+            loaded.append(embedder or pipeline.load_embedder())
+        return loaded[0](texts)
+
+    s = sync(index, args.docs, embed)
+    print(f"Done: {s['indexed']} indexed ({s['chunks']} chunks), {s['unchanged']} unchanged, "
+          f"{s['removed']} removed, {s['failed']} failed. Index size: {len(index)} vectors.")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
