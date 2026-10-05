@@ -1,0 +1,79 @@
+# VectorBench API on a local Kubernetes cluster (kind or k3d).
+#
+# One replica on purpose: the index is a single VectorLiteDB file that only one process may
+# write, so the volume is ReadWriteOnce and updates use Recreate (old pod stops before the new
+# one mounts the volume). Scaling out means moving the index to a server-backed store first.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vectorbench-data
+  labels: {app: vectorbench}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vectorbench-api
+  labels: {app: vectorbench}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: vectorbench}
+  template:
+    metadata:
+      labels: {app: vectorbench}
+    spec:
+      containers:
+        - name: api
+          image: vectorbench-api:local      # built locally and loaded with `kind load docker-image`
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: VB_DB_PATH
+              value: /app/data/kb.db
+            - name: VB_DOCS_DIR
+              value: /app/data/docs          # uploads persist on the volume with the index
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests: {cpu: 250m, memory: 768Mi}
+            limits: {memory: 2Gi}            # model + torch runtime; no CPU limit to avoid throttling
+          # Startup covers the incremental ingest and model load; the other probes only begin after it passes.
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            failureThreshold: 30             # up to 5 minutes
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: vectorbench-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vectorbench-api
+  labels: {app: vectorbench}
+spec:
+  selector: {app: vectorbench}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

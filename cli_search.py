@@ -1,9 +1,7 @@
 import sys
-from sentence_transformers import SentenceTransformer
-from vectorlitedb import VectorLiteDB
 
-DB_PATH = "kb.db"
-DIM = 384
+import pipeline
+from store import Index
 
 def main():
     if len(sys.argv) < 2:
@@ -11,11 +9,9 @@ def main():
         sys.exit(1)
 
     q = sys.argv[1]
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-    db = VectorLiteDB(DB_PATH, dimension=DIM)
-
-    q_vec = model.encode(q).tolist()
-    results = db.search(query=q_vec, top_k=5)
+    embed = pipeline.load_embedder()
+    index = Index(pipeline.DB_PATH, dimension=pipeline.EMBED_DIM)
+    results = index.search(embed([q])[0], 5)
 
     print("\nTop matches:\n------------")
     for i, r in enumerate(results, 1):

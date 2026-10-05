@@ -6,16 +6,20 @@ services:
       - "8000:8000"
     volumes:
       - ./docs:/app/docs
-      - ./kb.db:/app/kb.db
-    restart: unless-stopped
+      # A directory mount: binding ./kb.db directly made Docker create a *directory* named kb.db
+      # when the file did not exist yet, and the index then failed to open.
+      - ./data:/app/data
     environment:
-      - PYTHONUNBUFFERED=1
+      - VB_DB_PATH=/app/data/kb.db
+      - VB_DOCS_DIR=/app/docs
+    restart: unless-stopped
 
   frontend:
     image: nginx:alpine
     container_name: vectorbench-frontend
     depends_on:
-      - api
+      api:
+        condition: service_healthy   # Dockerfile HEALTHCHECK polls /health
     ports:
       - "5173:80"
     volumes:

@@ -124,8 +124,8 @@ def test_parity_edge_cases():
             elif metric == "dot":
                 assert max_diff < 1e-6, f"Identical vectors should have identical dot product: {similarities}"
             elif metric == "l2":
-                # L2 distance should be 0 for identical vectors
-                assert all(abs(s) < 1e-6 for s in similarities), f"Identical vectors should have zero L2 distance: {similarities}"
+                # Zero L2 distance maps to similarity 1/(1+0) = 1.0 in VectorLiteDB
+                assert all(abs(s - 1.0) < 1e-6 for s in similarities), f"Identical vectors should have zero L2 distance (similarity 1.0): {similarities}"
         
         os.remove(path)
 
