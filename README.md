@@ -88,8 +88,9 @@ kubectl rollout status deployment/vectorbench-api
 kubectl port-forward service/vectorbench-api 8000:8000   # then open frontend/index.html
 ```
 
-Runs one replica by design: the index is a single file with one writer, so the volume is
-ReadWriteOnce and rollouts use `Recreate`. Uploaded documents persist on the same volume.
+Runs one replica by design: the index is a single file that the API also holds in memory, so
+only one process may own it. `replicas: 1` with the `Recreate` strategy enforces that (a
+ReadWriteOnce volume limits it to one node, not one pod). Uploaded documents persist on the same volume.
 
 ## API Endpoints
 
