@@ -1,0 +1,84 @@
+# The API with the pgvector backend. Unlike the embedded configuration it keeps no state on its own
+# disk (documents, chunks and vectors all live in Postgres), so it runs several replicas, rolls out
+# without downtime, and can scale on CPU (embedding queries is the CPU-heavy step).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vectorbench-api
+  namespace: vectorbench-pg
+  labels: {app: vectorbench-api}
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app: vectorbench-api}
+  template:
+    metadata:
+      labels: {app: vectorbench-api}
+    spec:
+      containers:
+        - name: api
+          image: vectorbench-api:local      # same image as the embedded configuration
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: VB_STORE
+              value: pgvector
+            - name: PG_USER
+              valueFrom: {secretKeyRef: {name: postgres-credentials, key: username}}
+            - name: PG_PASSWORD
+              valueFrom: {secretKeyRef: {name: postgres-credentials, key: password}}
+            - name: VB_PG_DSN               # $(VAR) expands the two variables defined above
+              value: postgresql://$(PG_USER):$(PG_PASSWORD)@postgres:5432/vectorbench
+          resources:
+            requests: {cpu: 250m, memory: 768Mi}   # the autoscaler measures CPU against this request
+            limits: {memory: 2Gi}
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /health, port: http}   # /health queries the store, so it fails if Postgres is unreachable
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vectorbench-api
+  namespace: vectorbench-pg
+spec:
+  selector: {app: vectorbench-api}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+# Needs metrics-server in the cluster (see README). Thresholds are a starting point: set them from
+# measured CPU per query once the benchmark and a load test have run.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vectorbench-api
+  namespace: vectorbench-pg
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vectorbench-api
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}

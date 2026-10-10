@@ -1,0 +1,44 @@
+# Nightly re-sync of published documents through the API. Unchanged documents come back as
+# "unchanged" (same SHA-256), so only documents that changed upstream are re-embedded.
+# Add one URL per line to urls.txt below, then: kubectl apply -f k8s/pgvector/30-sync-cronjob.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sync-urls
+  namespace: vectorbench-pg
+data:
+  urls.txt: |
+    # One document URL per line, e.g. the graduate funding policy PDFs you index.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: document-sync
+  namespace: vectorbench-pg
+spec:
+  schedule: "17 2 * * *"            # 02:17 daily, cluster time
+  concurrencyPolicy: Forbid         # never two syncs at once
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: sync
+              image: vectorbench-api:local
+              imagePullPolicy: IfNotPresent
+              command: ["python", "sync_client.py", "--api", "http://vectorbench-api:8000",
+                        "--urls", "/config/urls.txt"]
+              volumeMounts:
+                - name: urls
+                  mountPath: /config
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {memory: 256Mi}
+          volumes:
+            - name: urls
+              configMap:
+                name: sync-urls
