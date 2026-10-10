@@ -1,48 +1,25 @@
-"""API and ingestion behaviour: upload safety, idempotent re-index, scanned PDFs, concurrency, metrics.
-
-Uses a deterministic hashing embedder so tests run in seconds without downloading a model.
-"""
-import hashlib
+"""API and ingestion behaviour on both backends: upload safety, idempotent re-index, scanned PDFs,
+metrics, incremental ingestion, and (pgvector) several API replicas sharing one database."""
 import io
 import os
-import sys
-import threading
-import time
 
-import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import ingest  # noqa: E402
-import pipeline  # noqa: E402
-from app import create_app  # noqa: E402
-from store import Index  # noqa: E402
-from vectorlitedb import VectorLiteDB  # noqa: E402
-
-DIM = pipeline.EMBED_DIM
-
-
-def fake_embed(texts):
-    """Bag-of-words hashed into DIM buckets: same words -> same vector, overlapping words -> similar."""
-    out = []
-    for t in texts:
-        v = np.zeros(DIM, dtype=np.float32)
-        for w in t.lower().split():
-            v[int(hashlib.md5(w.encode()).hexdigest(), 16) % DIM] += 1.0
-        v[0] += 1e-3  # never all-zero
-        out.append(v.tolist())
-    return out
+import ingest
+import pipeline
+from app import create_app
+from conftest import PG_DSN, fake_embed
+from store import VectorLiteStore
 
 
 @pytest.fixture
-def env(tmp_path):
+def env(make_store, tmp_path):
     docs = tmp_path / "docs"
-    db = tmp_path / "data" / "kb.db"
-    app = create_app(embedder=fake_embed, db_path=str(db), docs_dir=str(docs))
+    store = make_store()
+    app = create_app(embedder=fake_embed, docs_dir=str(docs), store=store)
     with TestClient(app) as client:
-        yield client, tmp_path, docs, db
+        yield client, tmp_path, docs, store
 
 
 def upload(client, name, content: bytes):
@@ -62,19 +39,23 @@ def blank_pdf(pages=2) -> bytes:
 # --- upload safety ---
 
 def test_path_traversal_is_contained(env):
-    client, root, docs, _ = env
+    client, root, docs, store = env
     r = upload(client, "../../escape.txt", b"graduate student researcher stipend")
     assert r.status_code == 200, r.text
-    assert (docs / "escape.txt").exists()
-    assert not (root / "escape.txt").exists()
-    assert not (root.parent / "escape.txt").exists()
+    assert not (root / "escape.txt").exists() and not (root.parent / "escape.txt").exists()
+    assert "escape.txt" in store.file_stats()
+    if store.stores_sources:
+        assert store.source("escape.txt") == b"graduate student researcher stipend"
+        assert not (docs / "escape.txt").exists(), "pgvector mode must not depend on local disk"
+    else:
+        assert (docs / "escape.txt").exists()
 
 
 @pytest.mark.parametrize("name", ["notes.exe", "....", "../", ".pdf"])
 def test_rejects_bad_names(env, name):
-    client, _, docs, _ = env
+    client, _, docs, store = env
     assert upload(client, name, b"text").status_code == 400
-    assert list(docs.iterdir()) == []
+    assert list(docs.iterdir()) == [] and len(store) == 0
 
 
 def test_rejects_oversized_upload(env, monkeypatch):
@@ -108,11 +89,11 @@ def test_reupload_changed_replaces_old_chunks(env):
 # --- extraction ---
 
 def test_scanned_pdf_reports_reason(env):
-    client, _, docs, _ = env
+    client, _, docs, store = env
     r = upload(client, "scan.pdf", blank_pdf(3))
     assert r.status_code == 422
     assert "3 of 3 pages have no text layer" in r.json()["error"]
-    assert not (docs / "scan.pdf").exists()
+    assert not (docs / "scan.pdf").exists() and "scan.pdf" not in store.file_stats()
 
 
 def test_corrupt_pdf_is_client_error(env):
@@ -128,8 +109,7 @@ def test_docx_tables_are_extracted():
     t.rows[0].cells[0].text, t.rows[0].cells[1].text = "GSR Step 6", "$4,000"
     buf = io.BytesIO()
     d.save(buf)
-    text = pipeline.extract_text(buf.getvalue(), "s.docx").text
-    assert "GSR Step 6 | $4,000" in text
+    assert "GSR Step 6 | $4,000" in pipeline.extract_text(buf.getvalue(), "s.docx").text
 
 
 def test_sidecar_txt_is_not_indexed_twice(tmp_path):
@@ -158,6 +138,11 @@ def test_search_metrics_split_stages(env):
         m["last_query"]["embed_ms"] + m["last_query"]["search_ms"], abs=0.01)
 
 
+def test_health_reports_backend(env):
+    client, _, _, store = env
+    assert client.get("/health").json()["store"] == store.name
+
+
 def test_bench_and_parity(env):
     client, *_ = env
     b = client.get("/bench", params={"N": 300, "k": 5}).json()
@@ -165,74 +150,29 @@ def test_bench_and_parity(env):
     assert client.get("/parity", params={"K": 5}).json()["ok"] is True
 
 
-# --- index durability and concurrency ---
+# --- several API replicas on one database (pgvector only) ---
 
-def test_index_survives_reload_and_writes_through_symlink(tmp_path):
-    real = tmp_path / "outside" / "kb.db"
-    real.parent.mkdir()
-    link = tmp_path / "kb.db"
-    idx = Index(str(real), dimension=DIM)
-    os.symlink(real, link)
-    idx = Index(str(link), dimension=DIM)
-    idx.replace_file("x.txt", ["a", "b"], fake_embed(["a", "b"]), {"sha256": "h"})
-    assert link.is_symlink(), "atomic save must not replace the symlink"
-    assert len(VectorLiteDB(str(real))) == 2
-
-
-def test_failed_save_leaves_index_unchanged(tmp_path, monkeypatch):
-    idx = Index(str(tmp_path / "kb.db"), dimension=DIM)
-    idx.replace_file("x.txt", ["a"], fake_embed(["a"]))
-    monkeypatch.setattr(os, "replace", lambda *a: (_ for _ in ()).throw(OSError("disk full")))
-    with pytest.raises(OSError):
-        idx.replace_file("x.txt", ["b", "c"], fake_embed(["b", "c"]))
-    assert len(idx) == 1
-    assert len(VectorLiteDB(str(tmp_path / "kb.db"))) == 1
-
-
-def test_concurrent_search_and_write(tmp_path):
-    WRITERS = 8
-    idx = Index(str(tmp_path / "kb.db"), dimension=DIM)
-    idx.replace_file("seed.txt", ["seed"] * 50, fake_embed(["seed"] * 50))
-    errors = []
-    # Slow the save down so writers genuinely overlap. Race tests are probabilistic: without the
-    # writer lock this fails most runs (writers clobber each other's temp file); with it, never.
-    real_save = idx._db._save
-    idx._db._save = lambda: (time.sleep(0.003), real_save())[1]
-
-    def writer(i):
-        try:
-            for j in range(10):
-                chunks = [f"doc {i} rev {j} part {p}" for p in range(20)]
-                idx.replace_file(f"w{i}.txt", chunks, fake_embed(chunks))
-        except Exception as e:  # pragma: no cover - failure path
-            errors.append(e)
-
-    def reader():
-        try:
-            for _ in range(50):
-                idx.search(fake_embed(["seed"])[0], 5)
-        except Exception as e:  # pragma: no cover - failure path
-            errors.append(e)
-
-    threads = [threading.Thread(target=writer, args=(i,)) for i in range(WRITERS)] + \
-              [threading.Thread(target=reader) for _ in range(3)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    assert errors == []
-    assert len(idx) == 50 + WRITERS * 20
-    assert len(VectorLiteDB(str(tmp_path / "kb.db"))) == 50 + WRITERS * 20, "file on disk must match memory"
+def test_replicas_share_one_database(pg_factory, tmp_path):
+    """Two independent app instances, as two Kubernetes pods would be, each with its own local disk."""
+    a = create_app(embedder=fake_embed, docs_dir=str(tmp_path / "pod-a"), store=pg_factory())
+    b = create_app(embedder=fake_embed, docs_dir=str(tmp_path / "pod-b"), store=pg_factory())
+    with TestClient(a) as pod_a, TestClient(b) as pod_b:
+        assert upload(pod_a, "gsr.txt", b"graduate student researcher appointment").status_code == 200
+        hits = pod_b.get("/search", params={"q": "graduate student researcher", "k": 1}).json()
+        assert hits[0]["metadata"]["file"] == "gsr.txt"
+        assert pod_b.get("/files").json() == pod_a.get("/files").json()
+        again = upload(pod_b, "gsr.txt", b"graduate student researcher appointment").json()
+        assert again["unchanged"] is True, "pod B must see pod A's upload as the same content"
 
 
 # --- incremental ingestion ---
 
-def test_ingest_is_incremental_and_prunes(tmp_path, capsys):
+def test_ingest_vectorlite_is_incremental_and_prunes(tmp_path, capsys):
     docs, db = tmp_path / "docs", tmp_path / "kb.db"
     docs.mkdir()
     (docs / "a.txt").write_text("graduate funding " * 100)
     (docs / "b.txt").write_text("fellowship rules")
-    args = ["--docs", str(docs), "--db", str(db)]
+    args = ["--docs", str(docs), "--db", str(db), "--store", "vectorlite"]
 
     ingest.main(args, embedder=fake_embed)
     assert "2 indexed" in capsys.readouterr().out
@@ -246,4 +186,29 @@ def test_ingest_is_incremental_and_prunes(tmp_path, capsys):
     ingest.main(args, embedder=fake_embed)
     out = capsys.readouterr().out
     assert "1 indexed" in out and "1 removed" in out
-    assert set(Index(str(db), dimension=DIM).file_stats()) == {"a.txt"}
+    assert set(VectorLiteStore(str(db), dimension=pipeline.EMBED_DIM).file_stats()) == {"a.txt"}
+
+
+def test_ingest_pgvector_keeps_uploads_unless_pruning(pg_factory, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("VB_PG_DSN", PG_DSN)
+    monkeypatch.setenv("VB_PG_SCHEMA", pg_factory.schema)
+    store = pg_factory()
+    store.replace_file("uploaded.txt", ["only in the database"], fake_embed(["only in the database"]),
+                       sha256="u", source=b"only in the database")
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "a.txt").write_text("graduate funding")
+    args = ["--docs", str(docs), "--store", "pgvector"]
+
+    ingest.main(args, embedder=fake_embed)
+    out = capsys.readouterr().out
+    assert "1 indexed" in out and "0 removed" in out
+    assert set(store.file_stats()) == {"a.txt", "uploaded.txt"}
+    assert store.source("a.txt") == b"graduate funding"
+
+    ingest.main(args + ["--prune"], embedder=fake_embed)
+    assert "1 removed" in capsys.readouterr().out
+    assert set(store.file_stats()) == {"a.txt"}
+
+    with pytest.raises(SystemExit):
+        ingest.main(args + ["--rebuild"], embedder=fake_embed)

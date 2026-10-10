@@ -9,7 +9,8 @@ Playing around with vector databases locally. Ingests documents, generates embed
 ## Stack
 
 - Python 3.10+
-- VectorLiteDB (single-file SQLite-based vector DB)
+- VectorLiteDB (single-file embedded vector DB; JSON body, rewritten on every save)
+- Optional: Postgres + pgvector as a second storage backend (`VB_STORE=pgvector`)
 - sentence-transformers (all-MiniLM-L6-v2, 384-dim embeddings)
 - FastAPI + Uvicorn
 - Optional: Docker/docker-compose
@@ -77,6 +78,21 @@ docker compose up --build
 The index lives in `data/kb.db`. On start, `ingest.py` re-embeds only files that changed since the
 last run and drops files that were deleted; `python ingest.py --rebuild` starts from scratch.
 
+## Storage Backends
+
+The API, ingester and CLI run on either store; both pass the same test suite.
+
+| | `vectorlite` (default) | `pgvector` |
+|---|---|---|
+| Where data lives | one index file, held in memory by the API | Postgres tables (chunks, vectors, original files) |
+| Writers | one process | any number of API replicas |
+| Search | exact (brute force) | HNSW (approximate) by default, or exact |
+| Run it | nothing extra | `docker compose -f docker-compose.yml -f docker-compose.pgvector.yml up --build` |
+
+Ingestion pruning differs on purpose: with `vectorlite` the `docs/` directory is the source of truth, so
+files deleted there are dropped from the index. With `pgvector`, uploads live only in the database, so
+`ingest.py` prunes only with `--prune`.
+
 ## Kubernetes (local, kind)
 
 ```bash
@@ -88,13 +104,28 @@ kubectl rollout status deployment/vectorbench-api
 kubectl port-forward service/vectorbench-api 8000:8000   # then open frontend/index.html
 ```
 
-Runs one replica by design: the index is a single file with one writer, so the volume is
-ReadWriteOnce and rollouts use `Recreate`. Uploaded documents persist on the same volume.
+Runs one replica by design: the index is a single file that the API also holds in memory, so
+only one process may own it. `replicas: 1` with the `Recreate` strategy enforces that (a
+ReadWriteOnce volume limits it to one node, not one pod). Uploaded documents persist on the same volume.
+
+With pgvector (own namespace, so it can run next to the embedded one):
+
+```bash
+kubectl apply -f k8s/pgvector/
+kubectl -n vectorbench-pg rollout status statefulset/postgres
+kubectl -n vectorbench-pg rollout status deployment/vectorbench-api
+kubectl -n vectorbench-pg port-forward service/vectorbench-api 8001:8000
+python sync_client.py --api http://127.0.0.1:8001 --dir docs/     # load documents through the API
+```
+
+Two API replicas share Postgres; the autoscaler in `20-api.yaml` needs metrics-server
+(`kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml`,
+plus `--kubelet-insecure-tls` on kind). `30-sync-cronjob.yaml` re-syncs the URLs listed in its ConfigMap nightly.
 
 ## API Endpoints
 
 ```
-GET  /health                      # Status and vector count
+GET  /health                      # Status, vector count, active store
 GET  /search?q=...&k=5&file=...   # Semantic search (optional file filter)
 POST /upload                      # Upload document (multipart form)
 GET  /files                       # List files with chunk counts
@@ -115,18 +146,30 @@ Via CLI:
 python bench.py
 ```
 
+Backend comparison (embedded vs pgvector on the same corpus; writes CSV and a Markdown table to
+`benchmarks/results/`):
+```bash
+VB_PG_DSN=postgresql://vectorbench:vectorbench@localhost:5432/vectorbench \
+  python benchmarks/compare_stores.py --sizes 1000,5000,20000 --ef-search 20,40,100
+python benchmarks/compare_stores.py --source kb.db --stores vectorlite,pgvector   # your real embeddings
+```
+Measures ingest time, cost of re-indexing one document in a loaded corpus, p50/p95 search latency,
+recall@k against exact search, throughput at several client counts, and storage size. Store timings
+exclude embedding. Synthetic recall is not retrieval quality; use `--source kb.db` for realistic vectors.
+
 ## Configuration
 
-- Add documents to `docs/` and run `python ingest.py` (or upload via web)
-- Change distance metric in `VectorLiteDB()`: `cosine` (default), `l2`, `dot`
+- Add documents to `docs/` and run `python ingest.py` (or upload via web, or `python sync_client.py --dir docs/`)
+- Environment: `VB_STORE` (`vectorlite`|`pgvector`), `VB_DB_PATH`, `VB_DOCS_DIR`, `VB_CORS_ORIGINS`;
+  for pgvector `VB_PG_DSN`, `VB_PG_SCHEMA`, `VB_PG_SEARCH` (`hnsw`|`exact`), `VB_PG_EF_SEARCH`, `VB_PG_POOL_MAX`
 - Filter searches by filename: `/search?file=sample.txt&q=...`
 - Supported formats: `.txt`, `.md`, `.pdf`, `.docx`, `.pptx`, `.xlsx`
 
 ## Known Limitations
 
 By design:
-- Brute force search only (good for ~10k-100k vectors)
-- No concurrent writes
+- Embedded store: brute-force search, one writing process, whole file rewritten per commit
+  (see `benchmarks/compare_stores.py` for where that starts to matter)
 - Bring-your-own embeddings
 
 ## Performance Notes
@@ -173,4 +216,10 @@ See [TESTING.md](TESTING.md) for the full test suite including accuracy parity c
 
 ```bash
 python run_comprehensive_tests.py
+```
+
+Service and store tests (`tests/test_api.py`, `tests/test_store.py`, `tests/test_sync_client.py`) run on
+both backends; the pgvector half needs a database:
+```bash
+VB_TEST_PG_DSN=postgresql://vectorbench:vectorbench@localhost:5432/vectorbench pytest tests -q
 ```

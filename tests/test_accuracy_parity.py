@@ -72,17 +72,28 @@ def test_parity_near_ties():
     X = np.array([base_vec + 0.001 * rng.standard_normal(D) for _ in range(N)])
     q = base_vec + 0.0005 * rng.standard_normal(D)
     
+    # Near-tie scores differ by ~1e-9 while float32 rounding is ~1e-7, so *which* tied ids come back
+    # depends on summation order (and differs across BLAS builds). Compare scores instead: every
+    # returned id must score, in exact float64 arithmetic, within rounding of the true k-th best.
+    X64, q64 = X.astype(np.float64), q.astype(np.float64)
+    true_scores = {
+        "cosine": (X64 @ q64) / (np.linalg.norm(X64, axis=1) * np.linalg.norm(q64)),
+        "dot": X64 @ q64,
+        "l2": -np.linalg.norm(X64 - q64, axis=1),
+    }
     for metric in ["cosine", "dot", "l2"]:
         db, path = build_db(X, metric)
         res = db.search(q.tolist(), top_k=K)
         ids_db = [int(r["id"][1:]) for r in res]
-        ids_np, _ = topk_numpy(X, q, K, metric)
-        
-        # For near-ties, we just check that we get reasonable results
-        # and that the top-k sets have significant overlap
-        overlap = len(set(ids_db[:K]) & set(ids_np[:K]))
-        assert overlap >= K // 2, f"Metric {metric}: insufficient overlap {overlap}/{K}"
-        
+        scores = true_scores[metric]
+        kth_best = np.sort(scores)[::-1][K - 1]
+        tol = 1e-5 * max(1.0, abs(kth_best))
+
+        assert len(set(ids_db)) == K, f"Metric {metric}: expected {K} distinct results, got {ids_db}"
+        worst = min(scores[i] for i in ids_db)
+        assert worst >= kth_best - tol, (
+            f"Metric {metric}: returned an id scoring {worst:.9g}, below the true k-th best {kth_best:.9g}")
+
         os.remove(path)
 
 def test_parity_edge_cases():

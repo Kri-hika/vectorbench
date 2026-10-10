@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 import pipeline
 from pipeline import Embedder, ExtractionError
-from store import Index
+from store import VectorLiteStore, VectorStore, open_store
 
 log = logging.getLogger("vectorbench")
 
@@ -37,8 +37,9 @@ def _percentiles(vals: List[float]) -> Dict[str, Optional[float]]:
 
 
 def create_app(embedder: Optional[Embedder] = None, db_path: Optional[str] = None,
-               docs_dir: Optional[str] = None) -> FastAPI:
-    """Build the app. Tests pass a lightweight embedder and temp paths; production loads the model."""
+               docs_dir: Optional[str] = None, store: Optional[VectorStore] = None) -> FastAPI:
+    """Build the app. Tests pass a lightweight embedder, temp paths or a store; production loads
+    the model and opens the store chosen by VB_STORE."""
     db_path = db_path or pipeline.DB_PATH
     docs_dir = docs_dir or pipeline.DOCS_DIR
     state: Dict[str, Any] = {}
@@ -54,9 +55,14 @@ def create_app(embedder: Optional[Embedder] = None, db_path: Optional[str] = Non
     async def lifespan(_app: FastAPI):
         # Load the model and index before the server accepts traffic, so /health only answers once ready.
         state["embed"] = embedder or pipeline.load_embedder()
-        state["index"] = Index(db_path, dimension=pipeline.EMBED_DIM)
+        # `is not None`, not `or`: stores define __len__, so an empty store is falsy.
+        state["index"] = store if store is not None else open_store(db_path=db_path, dimension=pipeline.EMBED_DIM)
         os.makedirs(docs_dir, exist_ok=True)
-        yield
+        try:
+            yield
+        finally:
+            if store is None:  # a store passed in by the caller is the caller's to close
+                state["index"].close()
 
     app = FastAPI(title="VectorBench API", lifespan=lifespan)
     origins = [o.strip() for o in os.getenv("VB_CORS_ORIGINS", "*").split(",") if o.strip()]
@@ -64,12 +70,12 @@ def create_app(embedder: Optional[Embedder] = None, db_path: Optional[str] = Non
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False,
                        allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["*"])
 
-    def index() -> Index:
+    def index() -> VectorStore:
         return state["index"]
 
     @app.get("/health")
     def health():
-        return {"ok": True, "vectors": len(index())}
+        return {"ok": True, "vectors": len(index()), "store": index().name}
 
     @app.get("/metrics")
     def metrics():
@@ -134,20 +140,29 @@ def create_app(embedder: Optional[Embedder] = None, db_path: Optional[str] = Non
         chunks = pipeline.chunk_text(text)
         vectors = state["embed"](chunks)
 
-        # Stage the file first, swap the index, then publish the file, so disk and index never disagree.
-        final_path = os.path.join(docs_dir, filename)
-        fd, tmp_path = tempfile.mkstemp(prefix=".upload-", dir=docs_dir)
-        try:
-            with os.fdopen(fd, "wb") as f:
-                f.write(content)
-            with publish_lock:  # index swap + file rename as one step across concurrent uploads
-                n = index().replace_file(filename, chunks, vectors, {"sha256": sha})
-                os.replace(tmp_path, final_path)
-        except Exception:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-            log.exception("Failed to index %s", filename)
-            return JSONResponse(status_code=500, content={"error": "Failed to index file"})
+        if index().stores_sources:
+            # The database keeps the original next to its chunks in one transaction; no local disk
+            # involved, so any replica can serve any request.
+            try:
+                n = index().replace_file(filename, chunks, vectors, sha256=sha, source=content)
+            except Exception:
+                log.exception("Failed to index %s", filename)
+                return JSONResponse(status_code=500, content={"error": "Failed to index file"})
+        else:
+            # Stage the file first, swap the index, then publish the file, so disk and index never disagree.
+            final_path = os.path.join(docs_dir, filename)
+            fd, tmp_path = tempfile.mkstemp(prefix=".upload-", dir=docs_dir)
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    f.write(content)
+                with publish_lock:  # index swap + file rename as one step across concurrent uploads
+                    n = index().replace_file(filename, chunks, vectors, sha256=sha)
+                    os.replace(tmp_path, final_path)
+            except Exception:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                log.exception("Failed to index %s", filename)
+                return JSONResponse(status_code=500, content={"error": "Failed to index file"})
 
         body = {"message": f"Successfully uploaded and ingested {filename}", "unchanged": False,
                 "chunks": n, "total_vectors": len(index()), "file_type": file_type,
@@ -158,16 +173,20 @@ def create_app(embedder: Optional[Embedder] = None, db_path: Optional[str] = Non
 
     @app.get("/files")
     def list_files():
-        """Files on disk with their indexed chunk counts, read from index metadata."""
+        """Known files with their indexed chunk counts. With the embedded store this also lists files
+        in the docs directory that failed to index (count 0); with pgvector the database is the list."""
         stats = index().file_stats()
+        names = set(stats)
+        if not index().stores_sources:
+            names |= {os.path.basename(p) for p in pipeline.list_source_files(docs_dir)}
         out = []
-        for path in pipeline.list_source_files(docs_dir):
-            name = os.path.basename(path)
+        for name in sorted(names):
             count = stats.get(name, {}).get("chunks", 0)
             out.append({"filename": name, "count": count, "in_database": count > 0})
         return out
 
-    # --- lightweight, on-demand micro-benchmarks (run in a throwaway temp directory) ---
+    # --- micro-benchmarks of the embedded store itself (throwaway temp directory, any VB_STORE) ---
+    # Comparing backends on a real workload is benchmarks/compare_stores.py.
 
     @app.get("/bench")
     def bench(N: int = Query(500, ge=1, le=50000), k: int = Query(5, ge=1, le=50)):
@@ -175,7 +194,7 @@ def create_app(embedder: Optional[Embedder] = None, db_path: Optional[str] = Non
         dim = pipeline.EMBED_DIM
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "bench.db")
-            idx = Index(path, dimension=dim)
+            idx = VectorLiteStore(path, dimension=dim)
             X = np.random.randn(N, dim).astype("float32")
             t0 = time.perf_counter()
             idx.replace_file("bench", [""] * N, X.tolist())
@@ -200,7 +219,7 @@ def create_app(embedder: Optional[Embedder] = None, db_path: Optional[str] = Non
         sims = Xn @ (q / (np.linalg.norm(q) + 1e-9))
         np_ids = np.argsort(-sims)[:K].tolist()
         with tempfile.TemporaryDirectory() as tmp:
-            idx = Index(os.path.join(tmp, "parity.db"), dimension=D)
+            idx = VectorLiteStore(os.path.join(tmp, "parity.db"), dimension=D)
             idx.replace_file("parity", [""] * N, X.tolist())
             res = idx.search(q.tolist(), K)
         vl_ids = [int(r["id"].split("::")[1]) for r in res]

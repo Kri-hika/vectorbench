@@ -1,0 +1,33 @@
+# Run the API on Postgres + pgvector instead of the embedded index file:
+#   docker compose -f docker-compose.yml -f docker-compose.pgvector.yml up --build
+# Postgres is also published on localhost:5432 so benchmarks/compare_stores.py can reach it.
+# The credentials below are for local use only.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: vectorbench-postgres
+    environment:
+      POSTGRES_USER: vectorbench
+      POSTGRES_PASSWORD: vectorbench
+      POSTGRES_DB: vectorbench
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vectorbench -d vectorbench"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    environment:
+      VB_STORE: pgvector
+      VB_PG_DSN: postgresql://vectorbench:vectorbench@postgres:5432/vectorbench
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

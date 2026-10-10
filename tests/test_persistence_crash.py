@@ -156,9 +156,11 @@ def test_corruption_resilience():
             # If it opens, it should be empty or have partial data
             n = len(db2)
             assert n >= 0, "Corrupted DB should report non-negative length"
-        except Exception as e:
-            # Graceful failure is also acceptable
-            assert "corrupt" in str(e).lower() or "invalid" in str(e).lower() or "error" in str(e).lower()
+        except ValueError:
+            # Graceful failure is also acceptable: a truncated header surfaces as a ValueError
+            # (json.JSONDecodeError or VectorLiteDB's "Invalid file format"), not a crash elsewhere.
+            # The type is the contract; the library's message wording is not.
+            pass
 
 def test_concurrent_access_safety():
     """Test that multiple processes can't corrupt the DB"""

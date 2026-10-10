@@ -1,8 +1,10 @@
 # VectorBench API on a local Kubernetes cluster (kind or k3d).
 #
-# One replica on purpose: the index is a single VectorLiteDB file that only one process may
-# write, so the volume is ReadWriteOnce and updates use Recreate (old pod stops before the new
-# one mounts the volume). Scaling out means moving the index to a server-backed store first.
+# One replica on purpose: the index is a single VectorLiteDB file that each API process also
+# holds in memory, so exactly one process may own it. replicas: 1 plus the Recreate strategy
+# (old pod stops before the new one starts) is what enforces that. ReadWriteOnce does not: it
+# limits the volume to one node, not one pod. Scaling out means moving the index to a
+# server-backed store first.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

@@ -1,0 +1,6 @@
+# The pgvector configuration lives in its own namespace, so it can run next to the embedded one
+# (k8s/vectorbench.yaml, default namespace) on the same cluster for side-by-side comparison.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vectorbench-pg
