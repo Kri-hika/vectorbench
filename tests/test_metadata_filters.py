@@ -163,13 +163,13 @@ def test_filter_edge_cases():
     
     q = [0.9, 0.1]
     
-    # Test empty list handling
-    f1 = lambda m: len(m.get("empty_list", [])) == 0
+    # Test empty list handling (require the key: a missing key must not count as an empty list)
+    f1 = lambda m: "empty_list" in m and len(m["empty_list"]) == 0
     r1 = db.search(q, top_k=10, filter=f1)
     assert {x["id"] for x in r1} == {"a"}, f"Empty list filter failed: got {[x['id'] for x in r1]}"
     
-    # Test None handling
-    f2 = lambda m: m.get("none_list") is None
+    # Test None handling (require the key: m.get() also returns None when the key is missing)
+    f2 = lambda m: "none_list" in m and m["none_list"] is None
     r2 = db.search(q, top_k=10, filter=f2)
     assert {x["id"] for x in r2} == {"b"}, f"None filter failed: got {[x['id'] for x in r2]}"
     
