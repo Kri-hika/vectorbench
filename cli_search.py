@@ -1,7 +1,7 @@
 import sys
 
 import pipeline
-from store import Index
+from store import open_store
 
 def main():
     if len(sys.argv) < 2:
@@ -10,8 +10,11 @@ def main():
 
     q = sys.argv[1]
     embed = pipeline.load_embedder()
-    index = Index(pipeline.DB_PATH, dimension=pipeline.EMBED_DIM)
-    results = index.search(embed([q])[0], 5)
+    index = open_store(dimension=pipeline.EMBED_DIM)  # VB_STORE picks the backend
+    try:
+        results = index.search(embed([q])[0], 5)
+    finally:
+        index.close()
 
     print("\nTop matches:\n------------")
     for i, r in enumerate(results, 1):
